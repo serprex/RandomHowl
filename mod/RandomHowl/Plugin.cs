@@ -80,7 +80,8 @@ namespace RandomHowl
                 "which card each reward hands over: the aurora, the blood "
                 + "tears that grant a card, the skill nodes that grant one. "
                 + "Everything takes in the elder spirit gifts and the Fylge "
-                + "cards too");
+                + "cards too. A reward card nothing hands over any more can "
+                + "be crafted, from the recipe of a card that took its place");
 
             ElitePercent = Config.Bind("shuffle", "elite_percent", -1,
                 new ConfigDescription(

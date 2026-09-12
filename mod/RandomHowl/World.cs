@@ -23,6 +23,13 @@ namespace RandomHowl
         }
     }
 
+    /// One line of a recipe: which ingredient, and how many of it.
+    public struct Ingredient
+    {
+        public string Item;
+        public int Amount;
+    }
+
     /// Where a spawn point stands: its scene, and its spot in that scene.
     public struct Place
     {
@@ -48,8 +55,17 @@ namespace RandomHowl
         public readonly Dictionary<string, Place> Spawns = new Dictionary<string, Place>();
 
         /// The cards outside every realm but still in the player's pool — the
-        /// elder spirit gifts and the Fylge cards live here.
-        public readonly HashSet<string> Realmless = new HashSet<string>();
+        /// elder spirit gifts and the Fylge cards live here. Card to the type
+        /// it has.
+        public readonly Dictionary<string, string> Realmless = new Dictionary<string, string>();
+
+        /// What each of those cards is crafted from. Mostly nothing.
+        public readonly Dictionary<string, Ingredient[]> RealmlessRecipes =
+            new Dictionary<string, Ingredient[]>();
+
+        /// Cards the game only hands over and never lets you craft: skill tree
+        /// cards, elder spirit gifts, the aurora's card.
+        public readonly HashSet<string> Rewards = new HashSet<string>();
 
         /// Cards only the alternate card set uses. Kept out of card pool.
         public readonly HashSet<string> PlusOnly = new HashSet<string>();
@@ -62,8 +78,9 @@ namespace RandomHowl
         /// these at random.
         public readonly Dictionary<string, string[]> Loot = new Dictionary<string, string[]>();
 
-        /// Craftable card to how many copies of it the game allows by
-        /// default: 2 of a common card, 1 of a rare one.
+        /// Card to how many copies of it the game allows by default: 2 of a
+        /// common card, 1 of a rare one. Reward cards get a number too, in
+        /// case one ends up craftable.
         public readonly Dictionary<string, int> Copies = new Dictionary<string, int>();
 
         public readonly Dictionary<string, string> names = new Dictionary<string, string>();

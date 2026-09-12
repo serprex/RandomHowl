@@ -78,8 +78,10 @@ namespace RandomHowl
         public readonly Dictionary<string, Entrance> Entrances = new Dictionary<string, Entrance>();
         public readonly Dictionary<string, string[]> Enemies = new Dictionary<string, string[]>();
         public readonly Dictionary<string, string> Cards = new Dictionary<string, string>();
-        public readonly Dictionary<string, string[]> Recipes = new Dictionary<string, string[]>();
+        public readonly Dictionary<string, Ingredient[]> Recipes = new Dictionary<string, Ingredient[]>();
         public readonly Dictionary<string, string> Grants = new Dictionary<string, string>();
+        /// Reward cards no reward hands over any more, which can be crafted now.
+        public readonly HashSet<string> Crafted = new HashSet<string>();
         /// Scarce howls only: what each fight drops on its first win, one entry
         /// per enemy it spawns.
         public readonly Dictionary<string, List<Drop>> Drops = new Dictionary<string, List<Drop>>();
@@ -306,8 +308,6 @@ namespace RandomHowl
         /// reads as a broken card rather than a surprise.
         void BuildGrants(World world, string seed, GrantShuffle mode)
         {
-            if (mode == GrantShuffle.Off) return;
-
             var realms = new HashSet<string>();
             var pool = new List<string>();
             foreach (var slot in world.Cards)
@@ -321,13 +321,32 @@ namespace RandomHowl
             foreach (var node in world.Nodes)
                 if (node.Index == CardNode) gifts.Add(node);
 
+            // A gift card can take another card's realm and recipe (see
+            // Lend), and those sit on the card asset. So every gift card gets
+            // its own written back first, even with the shuffle off.
+            foreach (var slot in gifts)
+            {
+                string type;
+                Ingredient[] own;
+                if (world.Realmless.TryGetValue(slot.Value, out type))
+                {
+                    Cards[slot.Value] = type;
+                    Recipes[slot.Value] = world.RealmlessRecipes.TryGetValue(slot.Value, out own)
+                                          ? own : new Ingredient[0];
+                }
+                else if (realms.Contains(slot.Value) && !Recipes.ContainsKey(slot.Value))
+                    Recipes[slot.Value] = new Ingredient[0];
+            }
+
+            if (mode == GrantShuffle.Off) return;
+
             var slots = new List<Slot>();
             foreach (var slot in gifts)
             {
                 if (!realms.Contains(slot.Value))
                 {
                     if (mode != GrantShuffle.Everything
-                        || !world.Realmless.Contains(slot.Value)
+                        || !world.Realmless.ContainsKey(slot.Value)
                         || world.PlusOnly.Contains(slot.Value)) continue;
                     // The gift joins the pool too, so it can turn up anywhere
                     // a gift goes, and its own event moves off it.
@@ -345,12 +364,54 @@ namespace RandomHowl
             var order = new int[pool.Count];
             for (var i = 0; i < order.Length; i++) order[i] = i;
             Shuffle(order, null, rng);
+            var given = new List<string>();
             for (var i = 0; i < slots.Count; i++)
             {
                 var slot = slots[i];
                 var value = pool[order[i]];
+                given.Add(value);
                 Grants[Key(slot.Scene, slot.Key)] = value;
                 Note("gift", world, "card", slot, value);
+            }
+            Lend(world, slots, given);
+        }
+
+        /// A card that only a reward handed over, and no reward hands over
+        /// now, would be lost to the run. So it trades places with a card that
+        /// became a reward: it is crafted from that card's recipe, and put in
+        /// that card's realm if it had none. Cards are paired in slot order.
+        /// A new reward card with no recipe has nothing to lend, and is
+        /// skipped.
+        void Lend(World world, List<Slot> slots, List<string> given)
+        {
+            var was = new HashSet<string>();
+            foreach (var slot in slots) was.Add(slot.Value);
+            var now = new HashSet<string>(given);
+
+            var lost = new List<string>();
+            foreach (var slot in slots)
+                if (!now.Contains(slot.Value) && !lost.Contains(slot.Value)) lost.Add(slot.Value);
+
+            var lenders = new List<string>();
+            foreach (var card in given)
+            {
+                Ingredient[] recipe;
+                if (!was.Contains(card) && Recipes.TryGetValue(card, out recipe)
+                    && Array.Exists(recipe, line => line.Item != null))
+                    lenders.Add(card);
+            }
+
+            for (var i = 0; i < lost.Count && i < lenders.Count; i++)
+            {
+                var card = lost[i];
+                var lender = lenders[i];
+                Recipes[card] = Array.FindAll(Recipes[lender], line => line.Item != null);
+                string realm;
+                if (world.Realmless.ContainsKey(card) && Cards.TryGetValue(lender, out realm))
+                    Cards[card] = realm;
+                Crafted.Add(card);
+                Spoiler.Add("craft\t" + world.Name("card", card) + "\treward only\trecipe of "
+                            + world.Name("card", lender));
             }
         }
 
@@ -378,10 +439,11 @@ namespace RandomHowl
             for (var i = 0; i < slots.Count; i++)
             {
                 var slot = slots[i];
-                string[] recipe;
+                Ingredient[] recipe;
                 if (!Recipes.TryGetValue(slot.Key, out recipe))
-                    Recipes[slot.Key] = recipe = new string[sizes[slot.Key]];
-                if (slot.Index < recipe.Length) recipe[slot.Index] = values[i];
+                    Recipes[slot.Key] = recipe = new Ingredient[sizes[slot.Key]];
+                if (slot.Index < recipe.Length)
+                    recipe[slot.Index] = new Ingredient { Item = values[i], Amount = slot.Amount };
                 Note("recipe", world.Name("card", slot.Key) + " #" + slot.Index,
                      world, "item", slot.Value, values[i]);
             }
@@ -604,18 +666,20 @@ namespace RandomHowl
         /// Scarce howls pays out a fight once, so every ingredient a card needs
         /// has to come from a pickup or a first win. This is how many of each
         /// ingredient the pickups leave short. Each craftable card counts as
-        /// many times as the game lets you craft it.
+        /// many times as the game lets you craft it. Reward cards and cards
+        /// outside the realms can't be crafted, unless Lend made them so.
         Dictionary<string, double> Missing(World world)
         {
             var missing = new Dictionary<string, double>();
-            foreach (var slot in world.Recipes)
+            foreach (var entry in Recipes)
             {
                 int copies;
-                if (!world.Copies.TryGetValue(slot.Key, out copies) || copies == 0) continue;
-                string[] recipe;
-                var item = Recipes.TryGetValue(slot.Key, out recipe) && slot.Index < recipe.Length
-                           && recipe[slot.Index] != null ? recipe[slot.Index] : slot.Value;
-                Tally(missing, item, copies * slot.Amount);
+                if (!world.Copies.TryGetValue(entry.Key, out copies) || copies == 0) continue;
+                if (!Crafted.Contains(entry.Key) && (world.Rewards.Contains(entry.Key)
+                                                     || world.Realmless.ContainsKey(entry.Key)))
+                    continue;
+                foreach (var line in entry.Value)
+                    if (line.Item != null) Tally(missing, line.Item, copies * line.Amount);
             }
             foreach (var slot in world.Ingredients) Tally(missing, slot.Value, -1);
             return missing;

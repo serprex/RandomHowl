@@ -90,7 +90,7 @@ Everything on the in-game screen is also stored in
 | --- | --- | --- |
 | `seed` | text | Same seed, same shuffle. Empty picks a random one |
 | `enemies` | `Off` / `On` / `Restricted` | Shuffle enemies between fights. Bosses never move. `Restricted` keeps elites in elite fights |
-| `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards |
+| `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards. A reward card that nothing gives any more can be crafted instead, using the recipe of a card that took its place |
 | `elite_percent` | `-1` to `100` | Share of enemies that appear in elite form. `-1` keeps the vanilla amount (about 23%) |
 | `totems` | true / false | Shuffle totem pickups |
 | `ingredients` | true / false | Shuffle ingredient pickups |

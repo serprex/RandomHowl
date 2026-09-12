@@ -138,6 +138,8 @@ namespace RandomHowl
             world.Recipes.Clear();
             world.PlusOnly.Clear();
             world.Realmless.Clear();
+            world.RealmlessRecipes.Clear();
+            world.Rewards.Clear();
             world.Copies.Clear();
             var realms = new HashSet<string>();
             var realmless = new HashSet<string>();
@@ -156,9 +158,17 @@ namespace RandomHowl
                 if (guid == null || type == null) continue;
                 // Mode 2 is the alternate card set's own version of a card.
                 if (Number(Fields.Get(card, "mode")) == 2) world.PlusOnly.Add(guid);
+                if (Flag(card, "isProgressionCard") || Flag(card, "isEnvironmentalReward")
+                    || Flag(card, "isGreatSpiritReward"))
+                    world.Rewards.Add(guid);
                 var realm = Registry.GuidOf(type);
                 if (realm == null) continue;
-                if (realmless.Contains(realm)) world.Realmless.Add(guid);
+                if (realmless.Contains(realm))
+                {
+                    world.Realmless[guid] = realm;
+                    world.RealmlessRecipes[guid] = Recipe(card);
+                    world.Copies[guid] = Copies(world, card, guid);
+                }
                 if (!realms.Contains(realm)) continue;
                 world.Cards.Add(new Slot { Key = guid, Value = realm });
                 world.Copies[guid] = Copies(world, card, guid);
@@ -192,15 +202,31 @@ namespace RandomHowl
             }
         }
 
+        /// The same, for a card outside the realms: every line in order,
+        /// without the recipe slots.
+        static Ingredient[] Recipe(UnityEngine.Object card)
+        {
+            var found = new List<Ingredient>();
+            var recipe = Fields.Get(card, "recipe") as IList;
+            if (recipe == null) return found.ToArray();
+            foreach (var line in recipe)
+            {
+                var data = line == null ? null : Fields.Get(line, "data") as UnityEngine.Object;
+                var item = data == null ? null : Registry.GuidOf(data);
+                if (item == null) continue;
+                found.Add(new Ingredient { Item = item, Amount = Number(Fields.Get(line, "quantity")) });
+            }
+            return found.ToArray();
+        }
+
         /// How many of a card can be crafted when the limit goes by rarity,
         /// which is the game's default. Custom mode can set 1, 2 or 3 for every
         /// card instead; that isn't taken into account. Cards the skill tree or
-        /// an event hands over are never crafted, so they count for nothing.
+        /// an event hands over get a number too: the gift shuffle can make one
+        /// craftable.
         static int Copies(World world, UnityEngine.Object card, string guid)
         {
-            if (world.PlusOnly.Contains(guid) || Flag(card, "isProgressionCard")
-                || Flag(card, "isEnvironmentalReward") || Flag(card, "isGreatSpiritReward"))
-                return 0;
+            if (world.PlusOnly.Contains(guid)) return 0;
             switch (Number(Fields.Get(card, "rarity")))
             {
                 case 0: return 4;       // basic

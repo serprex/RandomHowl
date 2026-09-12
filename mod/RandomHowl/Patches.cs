@@ -118,6 +118,8 @@ namespace RandomHowl
             Hook(harmony, "EventComponentRecieveTotem", "DoRun", nameof(TotemGiven));
             Hook(harmony, "EventComponentRecieveCard", "DoRun", nameof(CardGiven));
             Hook(harmony, "ProgressionData", "Unlock", nameof(SkillBought));
+            Hook(harmony, "CardData", "allowUnlockByCrafting", nameof(CardCraftable),
+                 true, getter: true);
             if (skipIntro)
                 Hook(harmony, "CutSceneSequence", "Show", nameof(CutsceneStarted));
         }
@@ -273,6 +275,17 @@ namespace RandomHowl
             });
         }
 
+        /// A reward card that no reward hands over any more can be crafted,
+        /// and turns up in the book like any other card. The game reads this
+        /// in the book reveal and the juice bar alike.
+        public static void CardCraftable(object __instance, ref bool __result)
+        {
+            if (__result || plan.Crafted.Count == 0) return;
+            var guid = Fields.Get(__instance, "uniqueIdentifier") as string;
+            if (guid == null || !plan.Crafted.Contains(guid)) return;
+            __result = Fields.Property(__instance, "IsCorrectMode") as bool? ?? false;
+        }
+
         /// Card realms live on the card assets themselves, so they are set
         /// once, as soon as the card list is up. Assets are only changed in
         /// memory — quitting the game puts them back.
@@ -305,8 +318,9 @@ namespace RandomHowl
         }
 
         /// What each card is crafted from sits on the card asset as well, so
-        /// it goes on beside the realms and comes off the same way. Only the
-        /// ingredient moves — the quantity beside it stays as it was.
+        /// it goes on beside the realms and comes off the same way. The whole
+        /// recipe is written, amounts and length too, since a reward card can
+        /// take on the recipe of another card (see Plan.Lend).
         public static void SetRecipes()
         {
             if (plan == null) return;
@@ -316,17 +330,22 @@ namespace RandomHowl
                 foreach (var card in Registry.AllCards())
                 {
                     var guid = Registry.GuidOf(card);
-                    string[] wanted;
+                    Ingredient[] wanted;
                     if (guid == null || !plan.Recipes.TryGetValue(guid, out wanted)) continue;
                     var recipe = Fields.Get(card, "recipe") as IList;
                     if (recipe == null) continue;
-                    for (var i = 0; i < wanted.Length && i < recipe.Count; i++)
+                    var lineType = recipe.GetType().GetGenericArguments()[0];
+                    for (var i = 0; i < wanted.Length; i++)
                     {
-                        if (wanted[i] == null || recipe[i] == null) continue;
-                        var data = Registry.Item(wanted[i]);
-                        if (data == null) { Missing("ingredient", wanted[i]); continue; }
-                        if (Fields.Set(recipe[i], "data", data)) moved++;
+                        if (wanted[i].Item == null) continue;
+                        var data = Registry.Item(wanted[i].Item);
+                        if (data == null) { Missing("ingredient", wanted[i].Item); continue; }
+                        var line = Activator.CreateInstance(lineType, new object[] { data, wanted[i].Amount });
+                        if (i < recipe.Count) recipe[i] = line;
+                        else recipe.Add(line);
+                        moved++;
                     }
+                    while (recipe.Count > wanted.Length) recipe.RemoveAt(recipe.Count - 1);
                 }
                 log.LogInfo("recipes: " + moved + " ingredients written");
             });
