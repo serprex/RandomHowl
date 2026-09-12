@@ -221,6 +221,7 @@ namespace RandomHowl
             AddToggle(list, template, "CARDS UNLOCKED", plugin.RevealCards);
             AddToggle(list, template, "SKIP LOGOS", plugin.SkipLogos);
             AddToggle(list, template, "SKIP INTRO", plugin.SkipIntro);
+            AddToggle(list, template, "AUTO TEXT", plugin.AutoText);
             AddToggle(list, template, "SPOILER LOG", plugin.SpoilerLog);
             var rowSize = (template.transform as RectTransform)?.sizeDelta ?? Vector2.zero;
             MakeSeedRow(template);

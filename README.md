@@ -102,6 +102,7 @@ Everything on the in-game screen is also stored in
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
 | `skip_logos` | true / false | Skip the publisher logos |
 | `skip_intro` | true / false | Skip the opening cutscene |
+| `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
 | `spoiler_log` | true / false | Write a spoiler log |
 
 ## Uninstall

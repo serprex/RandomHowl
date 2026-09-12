@@ -81,6 +81,9 @@ namespace RandomHowl
             foreach (var button in new[] { MapButton, TotemButton, CardButton })
                 Hook(harmony, "InputManager", button, nameof(ButtonPressed), true);
 
+            // Reads the config as it fires, so the menu toggle works mid-run.
+            Hook(harmony, "InputManager", "IsContinuePressed", nameof(ContinuePressed), true);
+
             if (!logos) return;
             var type = AccessTools.TypeByName("LogoIntroHandler");
             skipLogos = type == null ? null
@@ -745,6 +748,38 @@ namespace RandomHowl
             var method = AccessTools.Method(data.GetType(), "Translation", args);
             if (method == null) return null;
             return method.Invoke(data, parameter == null ? null : new object[] { parameter }) as string;
+        }
+
+        // --- auto text -------------------------------------------------------
+
+        // The dialogue line on screen, and when it showed up.
+        static object shownLine;
+        static float shownAt;
+
+        /// Holds the continue button down while a dialogue is up. The same
+        /// press writes out the rest of a line and then moves to the next.
+        /// Lines over a character's head have no box and show all at once,
+        /// so those get two seconds to be read first. Choices are buttons,
+        /// so they still wait for a pick.
+        public static void ContinuePressed(ref bool __result)
+        {
+            if (__result || !Plugin.Instance.AutoText.Value) return;
+            var dialogue = Manager("DialogueManager");
+            if (dialogue == null || Fields.Get(dialogue, "currentDialogue") == null) return;
+            var line = Fields.Get(dialogue, "currentContent");
+            if (line == null) return;
+            var data = Manager("LiveGameDataManager");
+            if (data != null && (Fields.Get(data, "gamePaused") as bool? ?? false)) return;
+
+            if (line != shownLine)
+            {
+                shownLine = line;
+                shownAt = Time.time;
+            }
+            var panel = Fields.Get(dialogue, "visualPanel") as Component;
+            if ((panel != null && panel.gameObject.activeInHierarchy)
+                || Time.time - shownAt >= 2f)
+                __result = true;
         }
 
         // --- helpers ---------------------------------------------------------

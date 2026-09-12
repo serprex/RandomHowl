@@ -36,6 +36,7 @@ namespace RandomHowl
         public ConfigEntry<bool> RevealCards;
         public ConfigEntry<bool> SkipLogos;
         public ConfigEntry<bool> SkipIntro;
+        public ConfigEntry<bool> AutoText;
         public ConfigEntry<bool> SpoilerLog;
 
         /// False until the world scan finishes; the screen waits on it.
@@ -109,6 +110,9 @@ namespace RandomHowl
                 "jump straight past the publisher logos to the title screen");
             SkipIntro = Config.Bind("extras", "skip_intro", true,
                 "cut the 83 second opening cutscene down to nothing");
+            AutoText = Config.Bind("extras", "auto_text", false,
+                "dialogue boxes show each line in full and move on without "
+                + "a click. Choices still wait for you to pick one");
             SpoilerLog = Config.Bind("extras", "spoiler_log", true,
                 "write spoiler-<seed>.txt next to this plugin");
 
