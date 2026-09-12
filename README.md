@@ -77,6 +77,10 @@ Death Howl/BepInEx/plugins/RandomHowl/
 If the spoiler log is on, it is written next to the plugin as
 `spoiler-<seed>.txt`.
 
+Every menu tab and fast travel are open from the start, and the tutorial's
+"press ..." tips don't show. When a tutorial event waits for you to press a
+key, the mod presses it for you.
+
 ## Options
 
 Everything on the in-game screen is also stored in

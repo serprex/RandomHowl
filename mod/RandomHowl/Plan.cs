@@ -317,8 +317,12 @@ namespace RandomHowl
                     pool.Add(slot.Key);
             }
 
+            var gifts = new List<Slot>(world.Grants);
+            foreach (var node in world.Nodes)
+                if (node.Index == CardNode) gifts.Add(node);
+
             var slots = new List<Slot>();
-            foreach (var slot in world.Grants)
+            foreach (var slot in gifts)
             {
                 if (!realms.Contains(slot.Value))
                 {

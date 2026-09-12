@@ -69,6 +69,18 @@ namespace RandomHowl
             Hook(harmony, "ProgressionDataManager", "NextSkillOrbSoulAmount",
                  nameof(TearHowlCost), getter: true);
 
+            // The tutorial hides menu tabs and fast travel until you get far
+            // enough. Shuffled caves can lead out of the first forest before
+            // then, with no way back, so everything is open from the start.
+            Hook(harmony, "TutorialStartEvent", "Awake", nameof(UnlockMenus), true);
+            Hook(harmony, "GenericTutorialMessage", "ShowText", nameof(TipShown));
+            Hook(harmony, "TutorialTextManager", "ShowOpenCraftingTipNoBorder", nameof(SkipTip));
+            Hook(harmony, "TutorialTextManager", "ShowSpendRessourcesToCraftTip", nameof(SkipTip));
+            Hook(harmony, "TutorialTextManager", "ShowOpenTotemTip", nameof(TotemTip));
+            Hook(harmony, "TutorialTextManager", "ShowOpenCraftingTip", nameof(CraftingTip));
+            foreach (var button in new[] { MapButton, TotemButton, CardButton })
+                Hook(harmony, "InputManager", button, nameof(ButtonPressed), true);
+
             if (!logos) return;
             var type = AccessTools.TypeByName("LogoIntroHandler");
             skipLogos = type == null ? null
@@ -99,6 +111,7 @@ namespace RandomHowl
             Hook(harmony, "LootManager", "DoLootDropFlow", nameof(LootLanding),
                  args: new[] { AccessTools.TypeByName("CombatArena") });
             Hook(harmony, "EnterOrExitCaveEvent", "DoHandleMidPartOfEventFlow", nameof(CaveEntered));
+            Hook(harmony, "CombatArena", "OnCombatStarted", nameof(DeathSpawn));
             Hook(harmony, "EventComponentRecieveTotem", "DoRun", nameof(TotemGiven));
             Hook(harmony, "EventComponentRecieveCard", "DoRun", nameof(CardGiven));
             Hook(harmony, "ProgressionData", "Unlock", nameof(SkillBought));
@@ -176,6 +189,34 @@ namespace RandomHowl
                 if (area == null) { Missing("area", exit.Area); return; }
                 Fields.Set(__instance, "exitAreaData", area);
                 Fields.Set(__instance, "targetSpawnPointID", exit.Spawn);
+            });
+        }
+
+        /// The only caves whose fight sends you outside when you die, and
+        /// their one way out. Every exit event in each leads to the same place.
+        static readonly Dictionary<string, string> DeathExits = new Dictionary<string, string>
+        {
+            { "MoorsEggCave", "Root/ExitCave" },
+            { "CliffsMiniBossCave", "Root/ExitCave" },
+        };
+
+        /// Dying in those fights puts you where the cave's exit now leads,
+        /// not outside its vanilla mouth. Set as the fight starts, since the
+        /// death flow reads it right after the fight ends.
+        public static void DeathSpawn(object __instance)
+        {
+            Guard("death spawn", () =>
+            {
+                var scene = ((Component)__instance).gameObject.scene.name;
+                string path;
+                Entrance exit;
+                if (!DeathExits.TryGetValue(scene, out path)
+                    || !plan.Entrances.TryGetValue(Plan.Key(scene, path), out exit)) return;
+                var death = Fields.Get(__instance, "spawnPointInAnotherScene");
+                if (death == null || !(Fields.Get(death, "isSet") as bool? ?? false)) return;
+                // death is a boxed copy, so write it back after changing it.
+                Fields.Set(death, "value", exit.Spawn);
+                Fields.Set(__instance, "spawnPointInAnotherScene", death);
             });
         }
 
@@ -515,6 +556,7 @@ namespace RandomHowl
             refights.Clear();
             lastArena = null;
             RevealAllCards();
+            UnlockMenus();
         }
 
         /// Every craftable card is known from the start, so the juice bar that
@@ -604,6 +646,105 @@ namespace RandomHowl
                     Fields.Set(frame, "audio", null);
                 }
             });
+        }
+
+        // --- no tutorial ----------------------------------------------------
+
+        static readonly string[] MenuFlags =
+        {
+            "collectionUnlocked", "totemMenuUnlocked", "progressionUnlocked",
+            "mapUnlocked", "overworldMapUnlocked", "fastTravelUnlocked",
+        };
+
+        const string MapButton = "PlayerIsPressingMapButton";
+        const string TotemButton = "PlayerIsPressingTotemButton";
+        const string CardButton = "PlayerIsPressingCardManagerButton";
+
+        // A button we press for the player, and the frame it was pressed on.
+        static string fakeButton;
+        static int fakeFrame;
+
+        /// The tutorial's first event turns every tab off when its scene
+        /// loads, including when a save made there is loaded again. Saving is
+        /// left alone: the early events act differently while it is off.
+        public static void UnlockMenus()
+        {
+            var data = Manager("LiveGameDataManager");
+            if (data == null) return;
+            Guard("menu unlock", () =>
+            {
+                foreach (var flag in MenuFlags) Fields.Set(data, flag, true);
+            });
+        }
+
+        /// Hides tutorial tips. The ones that explain why something failed
+        /// still show. The map tip is followed by a wait for the map button,
+        /// so that button gets pressed instead.
+        public static bool TipShown(string text)
+        {
+            var show = true;
+            Guard("tutorial tip", () =>
+            {
+                var tips = Manager("TutorialTextManager");
+                if (tips == null) return;
+                // The fast travel tip's event blocks input, so the player
+                // can't open the map without it. Keep it.
+                if (text == Translate(tips, "cannotFastTravelWithKeyItemCardTip")
+                    || text == Translate(tips, "notIncludedInDemoTip")
+                    || text == Translate(tips, "openMapToFastTravelTip"))
+                    return;
+                show = false;
+                var name = AccessTools.Method(tips.GetType(), "GetButtonName");
+                var key = name == null ? null
+                    : name.Invoke(null, new object[] { "OpenMap", "1" }) as string;
+                if (key != null && text == Translate(tips, "rightClickToOpenMapTip", key))
+                    Press(MapButton);
+            });
+            return show;
+        }
+
+        /// For tips that don't hold up an event.
+        public static bool SkipTip()
+        {
+            return false;
+        }
+
+        /// The event waits for the totem button right after this tip.
+        public static void TotemTip()
+        {
+            Press(TotemButton);
+        }
+
+        /// The event waits for the card menu to open right after this tip.
+        public static void CraftingTip()
+        {
+            Press(CardButton);
+        }
+
+        static void Press(string button)
+        {
+            fakeButton = button;
+            fakeFrame = -1;
+        }
+
+        /// A pressed button reads true for one frame, starting the first time
+        /// anything checks it, the same as a real press.
+        public static void ButtonPressed(MethodBase __originalMethod, ref bool __result)
+        {
+            if (fakeButton == null || __originalMethod.Name != fakeButton) return;
+            if (fakeFrame < 0) fakeFrame = Time.frameCount;
+            if (fakeFrame == Time.frameCount) __result = true;
+            else fakeButton = null;
+        }
+
+        static string Translate(object tips, string field, string parameter = null)
+        {
+            var data = Fields.Get(tips, field);
+            if (data == null) return null;
+            var args = parameter == null ? Type.EmptyTypes : new[] { typeof(string) };
+            var method = AccessTools.Method(data.GetType(), "Translation", args);
+            if (method == null) return null;
+            return method.Invoke(data, parameter == null ? null : new object[] { parameter }) as string;
         }
 
         // --- helpers ---------------------------------------------------------
