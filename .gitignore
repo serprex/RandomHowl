@@ -1,0 +1,6 @@
+.venv/
+mod/**/bin/
+mod/**/obj/
+mod/RandomHowl/Local.props
+build.sh
+private/
