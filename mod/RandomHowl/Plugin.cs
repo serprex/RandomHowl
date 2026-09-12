@@ -27,6 +27,7 @@ namespace RandomHowl
         // Live config entries, read by the screen and by Plan.Build.
         public ConfigEntry<string> Seed;
         public Dictionary<string, ConfigEntry<bool>> Shuffles;
+        public ConfigEntry<EntranceShuffle> EntranceMode;
         public ConfigEntry<EnemyShuffle> EnemyMode;
         public ConfigEntry<GrantShuffle> GrantMode;
         public ConfigEntry<int> ElitePercent;
@@ -60,14 +61,17 @@ namespace RandomHowl
                     "which totem each totem pickup gives") },
                 { "ingredients", Config.Bind("shuffle", "ingredients", true,
                     "which ingredient each world pickup is") },
-                { "entrances", Config.Bind("shuffle", "entrances", true,
-                    "where each cave mouth leads") },
                 { "card_realms", Config.Bind("shuffle", "card_realms", true,
                     "which realm each card belongs to") },
                 { "recipes", Config.Bind("shuffle", "recipes", true,
                     "which ingredients each card is crafted from") },
             };
 
+            EntranceMode = Config.Bind("shuffle", "entrances", EntranceShuffle.On,
+                "where each cave mouth leads. On keeps caves in pairs, so "
+                + "walking back out puts you where you came in. Decoupled sends "
+                + "every cave mouth and exit somewhere random. The way into a "
+                + "Fylge memory and back out never moves");
             EnemyMode = Config.Bind("shuffle", "enemies", EnemyShuffle.On,
                 "On puts any non-boss enemy anywhere. Bosses never move. "
                 + "Restricted leaves elites in elite combats");
@@ -92,8 +96,11 @@ namespace RandomHowl
 
             Scarce = Config.Bind("rules", "scarce_howls", false,
                 "howls survive death, a combat you have already beaten pays "
-                + "nothing the second time, and crafting is free. Howls become "
-                + "a finite pool spent only on skill points");
+                + "no howls or ingredients the second time, and crafting is "
+                + "free. Howls become a finite pool spent only on skill points. "
+                + "Enemies and their drops are set by the seed so first wins "
+                + "drop enough ingredients to craft every card up to its default "
+                + "copy limit, and drops are picked up automatically");
             RevealCards = Config.Bind("rules", "all_cards_revealed", false,
                 "every craftable card is in the book from the start, instead of "
                 + "four at a time as the ingredient juice fills up");
@@ -155,7 +162,8 @@ namespace RandomHowl
             harmony = new Harmony(Id);
 
             plan = Plan.Build(world, Seed.Value, name => Shuffles[name].Value,
-                              EnemyMode.Value, ElitePercent.Value, GrantMode.Value);
+                              EntranceMode.Value, EnemyMode.Value, ElitePercent.Value, GrantMode.Value,
+                              Scarce.Value);
             Patches.Install(harmony, Logger, plan, SkipIntro.Value);
 
             // Realms, recipes and the reveal sit on the shared card assets,

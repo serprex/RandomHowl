@@ -44,6 +44,9 @@ namespace RandomHowl
                         world.Ingredients.Count, world.Totems.Count, world.Entrances.Count,
                         world.Enemies.Count, world.Rarity.Count, clock.ElapsedMilliseconds / 1000f));
 
+            try { ReadSpawns(world); }
+            catch (Exception e) { log.LogWarning("could not read the spawn points: " + e.Message); }
+
             done(world);
         }
 
@@ -135,6 +138,7 @@ namespace RandomHowl
             world.Recipes.Clear();
             world.PlusOnly.Clear();
             world.Realmless.Clear();
+            world.Copies.Clear();
             var realms = new HashSet<string>();
             var realmless = new HashSet<string>();
             foreach (var type in types)
@@ -157,6 +161,7 @@ namespace RandomHowl
                 if (realmless.Contains(realm)) world.Realmless.Add(guid);
                 if (!realms.Contains(realm)) continue;
                 world.Cards.Add(new Slot { Key = guid, Value = realm });
+                world.Copies[guid] = Copies(world, card, guid);
                 CollectRecipe(world, card, guid);
             }
 
@@ -182,7 +187,25 @@ namespace RandomHowl
                 if (item == null) continue;
                 var slot = Slot.Of(null, guid, item);
                 slot.Index = i;
+                slot.Amount = Number(Fields.Get(recipe[i], "quantity"));
                 world.Recipes.Add(slot);
+            }
+        }
+
+        /// How many of a card can be crafted when the limit goes by rarity,
+        /// which is the game's default. Custom mode can set 1, 2 or 3 for every
+        /// card instead; that isn't taken into account. Cards the skill tree or
+        /// an event hands over are never crafted, so they count for nothing.
+        static int Copies(World world, UnityEngine.Object card, string guid)
+        {
+            if (world.PlusOnly.Contains(guid) || Flag(card, "isProgressionCard")
+                || Flag(card, "isEnvironmentalReward") || Flag(card, "isGreatSpiritReward"))
+                return 0;
+            switch (Number(Fields.Get(card, "rarity")))
+            {
+                case 0: return 4;       // basic
+                case 1: return 2;       // common
+                default: return 1;      // uncommon, shown as rare
             }
         }
 
@@ -368,7 +391,49 @@ namespace RandomHowl
                 Key = Keys.Path(comp.transform),
                 Value = area.name,
                 Spawn = spawn,
+                X = comp.transform.position.x,
+                Y = comp.transform.position.y,
             });
+        }
+
+        /// The game keeps a list of spawn points per region, with the scene
+        /// each is in and where it stands. A cave mouth only names a spawn
+        /// point, so this is how we know which scene it leads into.
+        static void ReadSpawns(World world)
+        {
+            var type = AccessTools.TypeByName("RegionDataManager");
+            var instance = type == null ? null : AccessTools.Property(type, "Instance");
+            var manager = instance == null ? null : instance.GetValue(null, null);
+            var regions = manager == null ? null : Fields.Get(manager, "regions") as IList;
+            if (regions == null)
+            {
+                log.LogWarning("no RegionDataManager.regions — caves can't be paired, "
+                               + "so ON leaves them alone");
+                return;
+            }
+            foreach (var region in regions)
+            {
+                if (region == null) continue;
+                foreach (var list in new[] { "waypoints", "caves" })
+                {
+                    var entries = Fields.Get(region, list) as IList;
+                    if (entries == null) continue;
+                    foreach (var entry in entries)
+                    {
+                        var id = entry == null ? null : Fields.Get(entry, "ID") as string;
+                        if (string.IsNullOrEmpty(id) || world.Spawns.ContainsKey(id)) continue;
+                        var position = Fields.Get(entry, "position");
+                        var at = position is Vector2 ? (Vector2)position : Vector2.zero;
+                        world.Spawns[id] = new Place
+                        {
+                            Scene = Fields.Get(entry, "scene") as string,
+                            X = at.x,
+                            Y = at.y,
+                        };
+                    }
+                }
+            }
+            log.LogInfo("discovery: " + world.Spawns.Count + " spawn points");
         }
 
         static void ScanArena(Component comp, string scene, World world)
@@ -378,6 +443,12 @@ namespace RandomHowl
             var prefabs = Fields.Get(comp, "enemyPrefabs") as IList;
             if (prefabs == null) return;
             var type = Number(Fields.Get(comp, "arenaType"));
+            // The arena spawns one enemy per spawn point, up to its difficulty,
+            // going round the prefab list. So a prefab can spawn more than once,
+            // or not at all.
+            var points = Fields.Get(comp, "spawnPoints") as IList;
+            var spawns = Math.Min(Number(Fields.Get(comp, "baseDifficulty")),
+                                  points == null ? 0 : points.Count);
             for (var i = 0; i < prefabs.Count; i++)
             {
                 var prefab = prefabs[i] as UnityEngine.Object;
@@ -385,18 +456,35 @@ namespace RandomHowl
                 var slot = Slot.Of(scene, uuid, prefab.name);
                 slot.Index = i;
                 slot.Arena = type;
+                slot.Amount = i < spawns ? (spawns - 1 - i) / prefabs.Count + 1 : 0;
                 world.Enemies.Add(slot);
                 Rank(prefab, world);
             }
         }
 
-        /// How the game ranks an enemy — common, elite or boss. It sits on the
-        /// prefab's own Character, which is what tells an Owl from an OwlElite.
+        /// How the game ranks an enemy — common, elite or boss — and what it
+        /// drops. The rank sits on the prefab's own Character, which is what
+        /// tells an Owl from an OwlElite.
         static void Rank(UnityEngine.Object prefab, World world)
         {
-            if (world.Rarity.ContainsKey(prefab.name) || Registry.CharacterType == null) return;
+            if (world.Rarity.ContainsKey(prefab.name)) return;
             var go = prefab as GameObject;
-            var character = go == null ? null : go.GetComponent(Registry.CharacterType);
+            if (go == null) return;
+            var enemy = Registry.EnemyType == null ? null : go.GetComponent(Registry.EnemyType);
+            var drops = enemy == null ? null : Fields.Get(enemy, "lootDrops") as IList;
+            if (drops != null)
+            {
+                var loot = new List<string>();
+                foreach (var drop in drops)
+                {
+                    var data = drop as UnityEngine.Object;
+                    var guid = data == null ? null : Registry.GuidOf(data);
+                    if (guid != null) loot.Add(guid);
+                }
+                world.Loot[prefab.name] = loot.ToArray();
+            }
+            var character = Registry.CharacterType == null ? null
+                : go.GetComponent(Registry.CharacterType);
             if (character == null) return;
             world.Rarity[prefab.name] = Number(Fields.Get(character, "rarityType"));
         }

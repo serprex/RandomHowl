@@ -10,6 +10,17 @@ namespace RandomHowl
         public string Spawn;
     }
 
+    /// How caves are shuffled.
+    public enum EntranceShuffle
+    {
+        Off,
+        /// Caves move in pairs: walking back out of a cave puts you at the
+        /// cave mouth you came in by.
+        On,
+        /// Every cave mouth and cave exit leads somewhere random on its own.
+        Decoupled,
+    }
+
     /// How far the card gift shuffle is allowed to go.
     public enum GrantShuffle
     {
@@ -69,6 +80,9 @@ namespace RandomHowl
         public readonly Dictionary<string, string> Cards = new Dictionary<string, string>();
         public readonly Dictionary<string, string[]> Recipes = new Dictionary<string, string[]>();
         public readonly Dictionary<string, string> Grants = new Dictionary<string, string>();
+        /// Scarce howls only: what each fight drops on its first win, one entry
+        /// per enemy it spawns.
+        public readonly Dictionary<string, List<Drop>> Drops = new Dictionary<string, List<Drop>>();
         public readonly List<string> Spoiler = new List<string>();
 
         public static string Key(string scene, string key)
@@ -80,7 +94,8 @@ namespace RandomHowl
         /// Each category gets its own seed, so turning one off leaves the rest
         /// exactly where they were.
         public static Plan Build(World world, string seed, Func<string, bool> enabled,
-                                 EnemyShuffle enemies, int elitePercent, GrantShuffle grants)
+                                 EntranceShuffle entrances, EnemyShuffle enemies, int elitePercent, GrantShuffle grants,
+                                 bool scarce)
         {
             var plan = new Plan();
 
@@ -98,15 +113,22 @@ namespace RandomHowl
                     plan.Note("totem", world, "item", moved);
                 }
 
-            if (enabled("entrances"))
-                foreach (var moved in Permute(world.Entrances, seed, "entrances"))
+            if (entrances != EntranceShuffle.Off)
+            {
+                var caves = CaveSlots(world);
+                var moves = entrances == EntranceShuffle.Decoupled
+                            ? Permute(caves, seed, "entrances")
+                            : Couple(world, caves, seed);
+                // Many caves share one area, so the spoiler names the spawn
+                // point, which says which cave it is.
+                foreach (var moved in moves)
                 {
                     plan.Entrances[Key(moved.Slot.Scene, moved.Slot.Key)] =
                         new Entrance { Area = moved.Value, Spawn = moved.Spawn };
-                    plan.Note("entrance", world, "area", moved);
+                    plan.Note("entrance", moved.Slot.Scene + " " + moved.Slot.Key, world,
+                              "spawn", moved.Slot.Spawn, moved.Spawn);
                 }
-
-            plan.BuildEnemies(world, seed, enemies, elitePercent);
+            }
 
             // Cards are the odd one out: a realm lives on the shared card
             // asset, which stays changed for the rest of the session. So when
@@ -123,7 +145,137 @@ namespace RandomHowl
             plan.BuildRecipes(world, seed, enabled("recipes"));
             plan.BuildGrants(world, seed, grants);
 
+            // Enemies come after the recipes: under scarce howls, how many of
+            // each enemy there are depends on what the cards are made of.
+            plan.BuildEnemies(world, seed, enemies, elitePercent, scarce);
+
             return plan;
+        }
+
+        /// Areas the story takes you to, not caves: the Fylge memory, entered
+        /// after beating a Fylge. The way in and the ways back out never move.
+        static readonly HashSet<string> StoryAreas = new HashSet<string>
+        {
+            "FylgeMemoryAreaData",
+        };
+
+        /// The cave events that can move: all but the ways into a story area,
+        /// and the ways out of the scenes those lead into.
+        static List<Slot> CaveSlots(World world)
+        {
+            var story = new HashSet<string>();
+            foreach (var slot in world.Entrances)
+            {
+                Place place;
+                if (StoryAreas.Contains(slot.Value) && slot.Spawn != null
+                    && world.Spawns.TryGetValue(slot.Spawn, out place))
+                    story.Add(place.Scene);
+            }
+            var slots = new List<Slot>();
+            foreach (var slot in world.Entrances)
+                if (!StoryAreas.Contains(slot.Value) && !story.Contains(slot.Scene))
+                    slots.Add(slot);
+            return slots;
+        }
+
+        /// Caves in pairs. A doorway has two sides, and a side is every cave
+        /// event in one scene that sends you to the same spawn point (a boss
+        /// cave can have two exits to the same place). The outer sides stay
+        /// put and the inner sides are shuffled between them, so leaving a
+        /// cave takes you back to the mouth you entered by. A side with no
+        /// partner, such as an unused test scene, stays vanilla.
+        static List<Moved> Couple(World world, List<Slot> slots, string seed)
+        {
+            var sides = new List<List<Slot>>();
+            var byKey = new Dictionary<string, List<Slot>>();
+            var perScene = new Dictionary<string, int>();
+            foreach (var slot in Ordered(new List<Slot>(slots)))
+            {
+                var key = Key(slot.Scene, slot.Spawn);
+                List<Slot> side;
+                if (!byKey.TryGetValue(key, out side))
+                {
+                    byKey[key] = side = new List<Slot>();
+                    sides.Add(side);
+                    int count;
+                    perScene.TryGetValue(slot.Scene, out count);
+                    perScene[slot.Scene] = count + 1;
+                }
+                side.Add(slot);
+            }
+
+            // A side's partner is in the scene it leads into, and leads back
+            // to this one. When two caves join the same two scenes, each spawn
+            // point should stand beside its partner's mouth, so take the
+            // closest.
+            var best = new int[sides.Count];
+            for (var i = 0; i < sides.Count; i++)
+            {
+                best[i] = -1;
+                var a = sides[i][0];
+                Place there;
+                if (a.Spawn == null || !world.Spawns.TryGetValue(a.Spawn, out there)) continue;
+                var nearest = double.MaxValue;
+                for (var j = 0; j < sides.Count; j++)
+                {
+                    var b = sides[j][0];
+                    Place back;
+                    if (j == i || b.Scene != there.Scene || b.Spawn == null
+                        || !world.Spawns.TryGetValue(b.Spawn, out back)
+                        || back.Scene != a.Scene) continue;
+                    var gap = Gap(there, b) + Gap(back, a);
+                    if (gap < nearest)
+                    {
+                        nearest = gap;
+                        best[i] = j;
+                    }
+                }
+            }
+
+            // Only sides that pick each other. The side in the scene with more
+            // cave events is the outer one, which keeps cave mouths leading
+            // into caves; a tie goes by scene name.
+            var outer = new List<List<Slot>>();
+            var inner = new List<List<Slot>>();
+            for (var i = 0; i < sides.Count; i++)
+            {
+                var j = best[i];
+                if (j <= i || best[j] != i) continue;
+                var here = perScene[sides[i][0].Scene];
+                var there = perScene[sides[j][0].Scene];
+                var iOuter = here != there ? here > there
+                             : string.CompareOrdinal(sides[i][0].Scene, sides[j][0].Scene) < 0;
+                outer.Add(iOuter ? sides[i] : sides[j]);
+                inner.Add(iOuter ? sides[j] : sides[i]);
+            }
+
+            var order = new int[outer.Count];
+            for (var i = 0; i < order.Length; i++) order[i] = i;
+            Shuffle(order, null, new Rng(seed + ":entrances"));
+
+            var moved = new List<Moved>();
+            for (var i = 0; i < order.Length; i++)
+            {
+                var j = order[i];
+                // Mouth i now opens into cave j, and cave j's exit comes back
+                // out at mouth i.
+                Lead(moved, outer[i], outer[j][0]);
+                Lead(moved, inner[j], inner[i][0]);
+            }
+            return moved;
+        }
+
+        static double Gap(Place spawn, Slot mouth)
+        {
+            double dx = spawn.X - mouth.X, dy = spawn.Y - mouth.Y;
+            return dx * dx + dy * dy;
+        }
+
+        /// Point every event on one side where another event goes.
+        static void Lead(List<Moved> moved, List<Slot> side, Slot to)
+        {
+            foreach (var slot in side)
+                moved.Add(new Moved { Slot = slot, Value = to.Value, Spawn = to.Spawn });
         }
 
         // A skill node's two rewards, told apart by the index it was scanned
@@ -270,8 +422,9 @@ namespace RandomHowl
         /// and the elite dial decides, afterwards, which of them are elite —
         /// with both forms of every spirit left somewhere in the world, so no
         /// ingredient goes missing. Off still runs, because the dial works on
-        /// its own.
-        void BuildEnemies(World world, string seed, EnemyShuffle mode, int percent)
+        /// its own. Under scarce howls each fight drops its loot once, so
+        /// enough spawns of each form are set aside for the cards first.
+        void BuildEnemies(World world, string seed, EnemyShuffle mode, int percent, bool scarce)
         {
             var slots = world.Enemies;
             var elite = new Dictionary<string, string>();    // species -> elite form
@@ -292,13 +445,11 @@ namespace RandomHowl
             // fight is the fight vanilla put there.
             var order = new int[slots.Count];
             for (var i = 0; i < order.Length; i++) order[i] = i;
+            var pinned = new bool[slots.Count];
+            for (var i = 0; i < slots.Count; i++)
+                pinned[i] = IsBossTier(slots[i].Value, world.Rarity, plain);
             if (mode != EnemyShuffle.Off)
-            {
-                var pinned = new bool[slots.Count];
-                for (var i = 0; i < slots.Count; i++)
-                    pinned[i] = IsBossTier(slots[i].Value, world.Rarity, plain);
                 Shuffle(order, pinned, new Rng(seed + ":enemies"));
-            }
 
             var moved = new string[slots.Count];
             var isElite = new bool[slots.Count];
@@ -312,12 +463,22 @@ namespace RandomHowl
             // one-of-each-form seed it lays down first is what keeps every
             // ingredient in the world. A wholly vanilla run is the one case
             // that needs nothing: vanilla already has both forms of everything.
-            if (percent >= 0 || mode != EnemyShuffle.Off)
+            // Under scarce howls the drops are picked here as well. The boss
+            // fights never move, so theirs are picked first and the quota only
+            // has to cover what they leave short.
+            var missing = scarce ? Missing(world) : null;
+            var drops = new Rng(seed + ":drops");
+            if (scarce) Allot(world, slots, pinned, true, moved, isElite, elite, missing, drops);
+
+            if (percent >= 0 || mode != EnemyShuffle.Off || scarce)
             {
                 var vanilla = 0;
                 foreach (var one in wasElite) if (one) vanilla++;
-                Promote(moved, isElite, slots, elite, mode, seed, percent, vanilla);
+                var quota = scarce ? Quota(world, pinned, moved, elite, missing) : null;
+                Promote(moved, isElite, slots, pinned, elite, mode, seed, percent, vanilla, quota);
             }
+
+            if (scarce) Allot(world, slots, pinned, false, moved, isElite, elite, missing, drops);
 
             var sizes = Sizes(slots, slot => Key(slot.Scene, slot.Key));
             for (var i = 0; i < slots.Count; i++)
@@ -370,11 +531,21 @@ namespace RandomHowl
         /// kind and 100% one plain of each. Below zero the dial is off and
         /// vanilla's own number of elites stands, wherever the seed puts them.
         /// Restricted only counts spawns in an elite combat, so asking for all of
-        /// them there is still far short of everything.
-        static void Promote(string[] moved, bool[] isElite, List<Slot> slots,
+        /// them there is still far short of everything. With a quota (scarce
+        /// howls) the seed is the quota instead of one of each, and the dial
+        /// can't touch the spawns the quota claimed.
+        static void Promote(string[] moved, bool[] isElite, List<Slot> slots, bool[] pinned,
                             Dictionary<string, string> elite, EnemyShuffle mode,
-                            string seed, int percent, int vanilla)
+                            string seed, int percent, int vanilla,
+                            Dictionary<string, int> quota)
         {
+            var rng = new Rng(seed + ":elites");
+            // Moving whole spawns about has to happen before the forms are
+            // picked. Off means nothing moves, so there the quota only picks
+            // forms.
+            if (quota != null && mode != EnemyShuffle.Off)
+                Stock(moved, slots, pinned, elite, quota, mode == EnemyShuffle.Restricted, rng);
+
             // Where each species stands: which of its spawns can be elite at
             // all, and which stay plain whatever the dial says. Under restricted
             // only a spawn in an elite combat can be elite, so the spawns
@@ -396,26 +567,270 @@ namespace RandomHowl
                 else { canElite[name].Add(i); open.Add(i); }
             }
 
-            var rng = new Rng(seed + ":elites");
-            if (mode == EnemyShuffle.Restricted) Even(canElite, plainOnly, moved, rng);
+            // Stock already gave every form the spawns it needs; Even would
+            // trade some of them away again.
+            if (mode == EnemyShuffle.Restricted && quota == null)
+                Even(canElite, plainOnly, moved, rng);
 
             // One of each form per species first, both out of the same draw, so
             // which spawn ends up which is the seed's business. A species with
             // a plain-only spawn already has its plain form in the world.
             Shuffle(open, null, rng);
-            var hasElite = new HashSet<string>();
-            var hasPlain = new HashSet<string>();
             var spare = new List<int>();
-            foreach (var i in open)
+            int seeded;
+            if (quota != null) seeded = Seed(open, moved, isElite, slots, plainOnly, elite, quota, spare);
+            else
             {
-                var name = moved[i];
-                var covered = plainOnly[name].Count > 0;
-                if ((covered || canElite[name].Count > 1) && hasElite.Add(name)) isElite[i] = true;
-                else if (covered || !hasPlain.Add(name)) spare.Add(i);
+                var hasElite = new HashSet<string>();
+                var hasPlain = new HashSet<string>();
+                foreach (var i in open)
+                {
+                    var name = moved[i];
+                    var covered = plainOnly[name].Count > 0;
+                    if ((covered || canElite[name].Count > 1) && hasElite.Add(name)) isElite[i] = true;
+                    else if (covered || !hasPlain.Add(name)) spare.Add(i);
+                }
+                seeded = hasElite.Count;
             }
 
             var want = percent >= 0 ? (open.Count * percent + 50) / 100 : vanilla;
-            for (var i = 0; i < want - hasElite.Count && i < spare.Count; i++) isElite[spare[i]] = true;
+            for (var i = 0; i < want - seeded && i < spare.Count; i++) isElite[spare[i]] = true;
+        }
+
+        /// Scarce howls pays out a fight once, so every ingredient a card needs
+        /// has to come from a pickup or a first win. This is how many of each
+        /// ingredient the pickups leave short. Each craftable card counts as
+        /// many times as the game lets you craft it.
+        Dictionary<string, double> Missing(World world)
+        {
+            var missing = new Dictionary<string, double>();
+            foreach (var slot in world.Recipes)
+            {
+                int copies;
+                if (!world.Copies.TryGetValue(slot.Key, out copies) || copies == 0) continue;
+                string[] recipe;
+                var item = Recipes.TryGetValue(slot.Key, out recipe) && slot.Index < recipe.Length
+                           && recipe[slot.Index] != null ? recipe[slot.Index] : slot.Value;
+                Tally(missing, item, copies * slot.Amount);
+            }
+            foreach (var slot in world.Ingredients) Tally(missing, slot.Value, -1);
+            return missing;
+        }
+
+        /// How many spawns of each enemy form it takes to drop what is still
+        /// missing. The plan picks every drop, so a form that can drop several
+        /// things can cover all of them, one spawn each. An ingredient several
+        /// forms drop is split evenly between them.
+        static Dictionary<string, int> Quota(World world, bool[] pinned, string[] moved,
+                                             Dictionary<string, string> elite,
+                                             Dictionary<string, double> missing)
+        {
+            var forms = new HashSet<string>();
+            for (var i = 0; i < moved.Length; i++)
+            {
+                if (pinned[i]) continue;
+                forms.Add(moved[i]);
+                string form;
+                if (elite.TryGetValue(moved[i], out form)) forms.Add(form);
+            }
+
+            var droppers = new Dictionary<string, double>();    // ingredient -> forms that drop it
+            foreach (var form in forms)
+            {
+                string[] loot;
+                if (!world.Loot.TryGetValue(form, out loot)) continue;
+                foreach (var item in new HashSet<string>(loot)) Tally(droppers, item, 1);
+            }
+
+            var quota = new Dictionary<string, int>();
+            foreach (var form in forms)
+            {
+                string[] loot;
+                if (!world.Loot.TryGetValue(form, out loot)) continue;
+                var spawns = 0.0;
+                foreach (var item in new HashSet<string>(loot))
+                {
+                    double gap;
+                    if (missing.TryGetValue(item, out gap) && gap > 0) spawns += gap / droppers[item];
+                }
+                // A hair off before rounding up, so 2.0000001 stays 2.
+                var count = (int)Math.Ceiling(spawns - 1e-6);
+                if (count > 0) quota[form] = count;
+            }
+            return quota;
+        }
+
+        /// Picks what every spawn drops, either in the pinned slots or in the
+        /// rest. Each spawn drops whichever of its possible drops is furthest
+        /// short; when none is, one at random, the way the game would. These
+        /// replace the game's own roll on a fight's first win.
+        void Allot(World world, List<Slot> slots, bool[] pinned, bool which, string[] moved,
+                   bool[] isElite, Dictionary<string, string> elite,
+                   Dictionary<string, double> missing, Rng rng)
+        {
+            for (var i = 0; i < slots.Count; i++)
+            {
+                if (pinned[i] != which) continue;
+                var name = isElite[i] ? elite[moved[i]] : moved[i];
+                string[] loot;
+                if (!world.Loot.TryGetValue(name, out loot) || loot.Length == 0) continue;
+                int rank;
+                world.Rarity.TryGetValue(name, out rank);
+
+                var key = Key(slots[i].Scene, slots[i].Key);
+                List<Drop> arena;
+                if (!Drops.TryGetValue(key, out arena)) Drops[key] = arena = new List<Drop>();
+                for (var n = 0; n < slots[i].Amount; n++)
+                {
+                    var item = Pick(loot, missing, rng);
+                    Tally(missing, item, -1);
+                    arena.Add(new Drop { Item = item, Elite = rank != 0 });
+                    Spoiler.Add("drop\t" + slots[i].Scene + " " + slots[i].Key + "\t"
+                                + name + "\t" + world.Name("item", item));
+                }
+            }
+        }
+
+        static string Pick(string[] loot, Dictionary<string, double> missing, Rng rng)
+        {
+            var best = new List<string>();
+            var most = 0.0;
+            foreach (var item in loot)
+            {
+                double gap;
+                missing.TryGetValue(item, out gap);
+                if (gap <= 0 || gap < most) continue;
+                if (gap > most)
+                {
+                    best.Clear();
+                    most = gap;
+                }
+                best.Add(item);
+            }
+            return best.Count > 0 ? best[rng.Below(best.Count)] : loot[rng.Below(loot.Length)];
+        }
+
+        static void Tally(Dictionary<string, double> counts, string key, double amount)
+        {
+            double had;
+            counts.TryGetValue(key, out had);
+            counts[key] = had + amount;
+        }
+
+        static int Get(Dictionary<string, int> quota, string form)
+        {
+            int count;
+            return form != null && quota.TryGetValue(form, out count) ? count : 0;
+        }
+
+        /// Scarce howls only: give every species enough spawns for its quota.
+        /// A species that is short takes a slot from one that has spawns to
+        /// spare after its own quota, so how many of each enemy there are
+        /// changes. The plain shuffle never does that. Under restricted an elite
+        /// form only counts spawns in an elite combat, so an elite shortfall
+        /// takes one of those. A plain shortfall takes a slot outside an elite
+        /// combat when it can, to leave room for elites. Bosses are never taken.
+        /// If nobody has spawns to spare, the species stays short.
+        static void Stock(string[] moved, List<Slot> slots, bool[] pinned,
+                          Dictionary<string, string> elite, Dictionary<string, int> quota,
+                          bool restricted, Rng rng)
+        {
+            var total = new Dictionary<string, int>();      // species -> spawns
+            var room = new Dictionary<string, int>();       // species -> spawns that can be elite
+            for (var i = 0; i < slots.Count; i++)
+            {
+                if (pinned[i]) continue;
+                var name = moved[i];
+                if (!total.ContainsKey(name)) { total[name] = 0; room[name] = 0; }
+                total[name] += slots[i].Amount;
+                if (!restricted || slots[i].Arena == EliteArena) room[name] += slots[i].Amount;
+            }
+
+            var needElite = new Dictionary<string, int>();
+            var needAll = new Dictionary<string, int>();
+            var names = new List<string>(total.Keys);
+            names.Sort(string.CompareOrdinal);
+            foreach (var name in names)
+            {
+                string form;
+                needElite[name] = elite.TryGetValue(name, out form) ? Get(quota, form) : 0;
+                needAll[name] = needElite[name] + Get(quota, name);
+            }
+
+            foreach (var name in names)
+            {
+                while (true)
+                {
+                    var eliteShort = room[name] < needElite[name];
+                    if (!eliteShort && total[name] >= needAll[name]) break;
+
+                    var best = new List<int>();
+                    var fallback = new List<int>();
+                    for (var i = 0; i < slots.Count; i++)
+                    {
+                        var donor = moved[i];
+                        var amount = slots[i].Amount;
+                        if (pinned[i] || donor == name || amount == 0) continue;
+                        var canElite = !restricted || slots[i].Arena == EliteArena;
+                        if (eliteShort && !canElite) continue;
+                        if (total[donor] - amount < needAll[donor]) continue;
+                        if (canElite && room[donor] - amount < needElite[donor]) continue;
+                        (restricted && canElite && !eliteShort ? fallback : best).Add(i);
+                    }
+                    if (best.Count == 0) best = fallback;
+                    if (best.Count == 0) break;
+
+                    var take = best[rng.Below(best.Count)];
+                    var from = moved[take];
+                    var spawns = slots[take].Amount;
+                    total[from] -= spawns;
+                    total[name] += spawns;
+                    if (!restricted || slots[take].Arena == EliteArena)
+                    {
+                        room[from] -= spawns;
+                        room[name] += spawns;
+                    }
+                    moved[take] = name;
+                }
+            }
+        }
+
+        /// The seed under scarce howls. Each species gets as many spawns of
+        /// each form as its quota asks for, and at least one of each where
+        /// there is room, as outside scarce howls. Each slot goes to whichever
+        /// form is further short, plain on a tie. What is left over is spare
+        /// for the dial. Returns how many slots it made elite.
+        static int Seed(List<int> open, string[] moved, bool[] isElite, List<Slot> slots,
+                        Dictionary<string, List<int>> plainOnly, Dictionary<string, string> elite,
+                        Dictionary<string, int> quota, List<int> spare)
+        {
+            var gotElite = new Dictionary<string, int>();
+            var gotPlain = new Dictionary<string, int>();
+            foreach (var entry in plainOnly)
+            {
+                var spawns = 0;
+                foreach (var i in entry.Value) spawns += slots[i].Amount;
+                gotPlain[entry.Key] = spawns;
+                gotElite[entry.Key] = 0;
+            }
+
+            var made = 0;
+            foreach (var i in open)
+            {
+                var name = moved[i];
+                var amount = slots[i].Amount;
+                var eliteGap = Math.Max(1, Get(quota, elite[name])) - gotElite[name];
+                var plainGap = Math.Max(1, Get(quota, name)) - gotPlain[name];
+                if (amount > 0 && eliteGap > Math.Max(plainGap, 0))
+                {
+                    isElite[i] = true;
+                    gotElite[name] += amount;
+                    made++;
+                }
+                else if (amount > 0 && plainGap > 0) gotPlain[name] += amount;
+                else spare.Add(i);
+            }
+            return made;
         }
 
         /// Restricted can put every spawn of a species in an elite combat, or
@@ -500,6 +915,14 @@ namespace RandomHowl
             if (was == now) return;
             Spoiler.Add(kind + "\t" + where + "\t" + world.Name(family, was)
                         + "\t" + world.Name(family, now));
+        }
+
+        /// One planned drop: the item, and whether an elite or boss drops it,
+        /// which only changes the puff it comes out of.
+        public struct Drop
+        {
+            public string Item;
+            public bool Elite;
         }
 
         public struct Moved

@@ -60,6 +60,7 @@ namespace RandomHowl
             Hook(harmony, "LiveGameDataManager", "Start", nameof(CardsLoaded), true);
             Hook(harmony, "LiveGameDataManager", "AddSoul", nameof(HowlGained));
             Hook(harmony, "CombatArena", "OnCombatStarted", nameof(CombatStarted));
+            Hook(harmony, "LootManager", "OnLootDropAnimationDone", nameof(LootLanded), true);
             Hook(harmony, "CombatArena", "SetLeftOverDeathhowls", nameof(HowlsDropped));
             Hook(harmony, "PointsParticleHandler", "RoLoseDeathHowlAnimation",
                  nameof(HowlsFlyingAway));
@@ -93,6 +94,10 @@ namespace RandomHowl
             Hook(harmony, "WorldItem", "OnEnable", nameof(ItemAppeared));
             Hook(harmony, "CombatArena", "Start", nameof(ArenaReady));
             Hook(harmony, "CombatArena", "SpawnEnemies", nameof(ArenaReady));
+            Hook(harmony, "CombatArena", "SpawnEnemies", nameof(LeftoversCollected));
+            // DoLootDropFlow has two overloads; this is the one a won fight starts.
+            Hook(harmony, "LootManager", "DoLootDropFlow", nameof(LootLanding),
+                 args: new[] { AccessTools.TypeByName("CombatArena") });
             Hook(harmony, "EnterOrExitCaveEvent", "DoHandleMidPartOfEventFlow", nameof(CaveEntered));
             Hook(harmony, "EventComponentRecieveTotem", "DoRun", nameof(TotemGiven));
             Hook(harmony, "EventComponentRecieveCard", "DoRun", nameof(CardGiven));
@@ -102,14 +107,14 @@ namespace RandomHowl
         }
 
         static void Hook(Harmony harmony, string className, string methodName, string ours,
-                         bool after = false, bool getter = false)
+                         bool after = false, bool getter = false, Type[] args = null)
         {
             try
             {
                 var type = AccessTools.TypeByName(className);
                 var original = type == null ? null
                     : getter ? AccessTools.PropertyGetter(type, methodName)
-                             : (MethodBase)AccessTools.Method(type, methodName);
+                             : (MethodBase)AccessTools.Method(type, methodName, args);
                 if (original == null)
                 {
                     log.LogWarning("no " + className + "." + methodName
@@ -347,7 +352,97 @@ namespace RandomHowl
             return !beaten;
         }
 
+        /// No ingredients drop in a combat you have already beaten either, so
+        /// the ingredients in the world are all there is. On the first win the
+        /// plan says what drops: one item per enemy the fight spawned, whatever
+        /// became of it. So a frozen enemy that never thawed, or one a card
+        /// killed without its reward, still pays out. The drops the game rolled
+        /// only lend their spot and look. This runs as the drop flow is started,
+        /// before it reads the list.
+        public static void LootLanding(object __instance, object arena)
+        {
+            if (!Plugin.Instance.Scarce.Value) return;
+            Guard("loot drop", () =>
+            {
+                var loot = Fields.Get(__instance, "loot") as IList;
+                var area = arena as Component;
+                if (loot == null || area == null) return;
+                var id = Registry.Uuid(area.gameObject);
+                if (id != null && refights.Contains(id))
+                {
+                    loot.Clear();
+                    return;
+                }
+
+                List<Plan.Drop> planned;
+                var infoType = AccessTools.TypeByName("LootDropInfo");
+                if (infoType == null || !plan.Drops.TryGetValue(Keys.Uuid(area), out planned)) return;
+                var visuals = Manager("CommonVisuals");
+                var player = Manager("Player");
+                var made = new List<object>();
+                for (var i = 0; i < planned.Count; i++)
+                {
+                    var data = Registry.Item(planned[i].Item);
+                    if (data == null) { Missing("ingredient", planned[i].Item); continue; }
+                    var like = loot.Count == 0 ? null : loot[i % loot.Count];
+                    var material = like != null ? Fields.Get(like, "material")
+                        : visuals == null ? null : Fields.Get(visuals, "worldItem");
+                    var tile = like != null ? Fields.Get(like, "tileOfDeath")
+                        : player == null ? null : Fields.Property(player, "Cell");
+                    made.Add(Activator.CreateInstance(infoType, new[]
+                    {
+                        data, material, tile ?? Vector3Int.zero, planned[i].Elite,
+                    }));
+                }
+                loot.Clear();
+                foreach (var info in made) loot.Add(info);
+            });
+        }
+
+        /// A drop is picked up as soon as it lands, so nothing is left lying
+        /// about for the fight's next respawn to clear away.
+        public static void LootLanded(object drop)
+        {
+            if (!Plugin.Instance.Scarce.Value) return;
+            Guard("loot pickup", () =>
+            {
+                var item = drop as Behaviour;
+                if (item != null && item.isActiveAndEnabled) Call(item, "PickUp");
+            });
+        }
+
+        /// A fight that respawns clears away whatever it dropped before and is
+        /// still lying there, saved or not. Leaving the area while drops are
+        /// still landing can leave some behind, so add those to the collection
+        /// first. Not through PickUp: the area may still be loading, and PickUp
+        /// takes the item out of the world before the part that can fail.
+        public static void LeftoversCollected(object __instance)
+        {
+            if (!Plugin.Instance.Scarce.Value) return;
+            Guard("loot leftovers", () =>
+            {
+                var id = Registry.Uuid(((Component)__instance).gameObject);
+                var data = Manager("LiveGameDataManager");
+                var itemType = AccessTools.TypeByName("WorldItem");
+                var ingredientType = AccessTools.TypeByName("IngredientData");
+                if (id == null || data == null || itemType == null || ingredientType == null) return;
+                var add = AccessTools.Method(data.GetType(), "AddIngredientToCollection");
+                if (add == null) return;
+                foreach (var found in UnityEngine.Object.FindObjectsOfType(itemType))
+                {
+                    var item = found as Behaviour;
+                    if (item == null || Fields.Get(item, "spawnerID") as string != id) continue;
+                    var what = Fields.Get(item, "data");
+                    if (!ingredientType.IsInstanceOfType(what)) continue;
+                    add.Invoke(data, new[] { what, 1 });
+                    item.gameObject.SetActive(false);
+                }
+            });
+        }
+
         /// Snapshot at combat start: has this arena already been cleared?
+        /// defeatedArenas is part of the game's save, so this still holds
+        /// after quitting and loading the save again.
         public static void CombatStarted(object __instance)
         {
             Guard("re-fight", () =>
@@ -473,6 +568,12 @@ namespace RandomHowl
         {
             var method = AccessTools.Method(target.GetType(), name);
             return method == null ? null : method.Invoke(target, new[] { argument });
+        }
+
+        static object Call(object target, string name)
+        {
+            var method = AccessTools.Method(target.GetType(), name, Type.EmptyTypes);
+            return method == null ? null : method.Invoke(target, null);
         }
 
         /// The game's own Esc handler, pressed for you on the first frame.

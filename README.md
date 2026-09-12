@@ -90,11 +90,11 @@ Everything on the in-game screen is also stored in
 | `elite_percent` | `-1` to `100` | Share of enemies that appear in elite form. `-1` keeps the vanilla amount (about 23%) |
 | `totems` | true / false | Shuffle totem pickups |
 | `ingredients` | true / false | Shuffle ingredient pickups |
-| `entrances` | true / false | Shuffle where cave entrances lead |
+| `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. The way into a Fylge memory and back out never moves |
 | `card_realms` | true / false | Shuffle which realm each card belongs to |
 | `recipes` | true / false | Shuffle which ingredients each card needs |
 | `player_energy` | `1` to `20` | Ro's energy per turn, before totems and skills. Vanilla is 5 |
-| `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay nothing again. Howls are only spent on skill points |
+| `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay no howls or ingredients again. Howls are only spent on skill points. Enemies are placed so there's enough ingredients to craft every card up to its default copy limit |
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
 | `skip_logos` | true / false | Skip the publisher logos |
 | `skip_intro` | true / false | Skip the opening cutscene |

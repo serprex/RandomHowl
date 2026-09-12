@@ -28,11 +28,13 @@ namespace RandomHowl
         {
             "ingredients", "INGREDIENTS",
             "totems",      "TOTEMS",
-            "entrances",   "CAVES",
         };
 
         // The choices on the rows that are more than a yes/no. A null label
         // shows the number itself, which is how the game writes its own.
+        static readonly string[] CaveLabels = { "OFF", "ON", "DECOUPLED" };
+        static readonly int[] CaveValues = { 0, 1, 2 };
+
         static readonly string[] EnemyLabels = { "OFF", "ON", "RESTRICTED" };
         static readonly int[] EnemyValues = { 0, 1, 2 };
 
@@ -198,6 +200,9 @@ namespace RandomHowl
             var plugin = Plugin.Instance;
             for (var i = 0; i < Shuffles.Length; i += 2)
                 AddToggle(list, template, Shuffles[i + 1], plugin.Shuffles[Shuffles[i]]);
+            AddChoice(list, template, "CAVES", CaveLabels, CaveValues, false,
+                      (int)plugin.EntranceMode.Value,
+                      value => plugin.EntranceMode.Value = (EntranceShuffle)value);
             AddToggle(list, template, "CARDS", plugin.Shuffles["card_realms"]);
             AddToggle(list, template, "RECIPES", plugin.Shuffles["recipes"]);
             AddChoice(list, template, "CARD GIFTS", GrantLabels, GrantValues, false,

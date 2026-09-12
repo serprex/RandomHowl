@@ -12,12 +12,22 @@ namespace RandomHowl
                                 // skill node; 0 for everything else
         public string Value;    // what vanilla puts here
         public string Spawn;    // entrances only: the spawn point in the target area
+        public float X, Y;      // entrances only: where the cave mouth stands
         public int Arena;       // enemies only: the arena's own type, 1 being elite
+        public int Amount;      // enemies: how many times it spawns in its fight;
+                                // recipes: how many of the ingredient it takes
 
         public static Slot Of(string scene, string key, string value)
         {
             return new Slot { Scene = scene, Key = key, Value = value };
         }
+    }
+
+    /// Where a spawn point stands: its scene, and its spot in that scene.
+    public struct Place
+    {
+        public string Scene;
+        public float X, Y;
     }
 
     /// Every shufflable slot in the game, and what vanilla puts in it.
@@ -33,6 +43,10 @@ namespace RandomHowl
         public readonly List<Slot> Grants = new List<Slot>();
         public readonly List<Slot> Nodes = new List<Slot>();
 
+        /// Spawn point ID to where it stands, read off the game's own table.
+        /// Pairing caves needs to know which scene a cave mouth leads into.
+        public readonly Dictionary<string, Place> Spawns = new Dictionary<string, Place>();
+
         /// The cards outside every realm but still in the player's pool — the
         /// elder spirit gifts and the Fylge cards live here.
         public readonly HashSet<string> Realmless = new HashSet<string>();
@@ -43,6 +57,14 @@ namespace RandomHowl
         /// Enemy prefab name to how the game ranks it: 0 common, 1 elite,
         /// 2 boss. Filled in as the arenas are scanned.
         public readonly Dictionary<string, int> Rarity = new Dictionary<string, int>();
+
+        /// Enemy prefab name to what it can drop. Each spawn drops one of
+        /// these at random.
+        public readonly Dictionary<string, string[]> Loot = new Dictionary<string, string[]>();
+
+        /// Craftable card to how many copies of it the game allows by
+        /// default: 2 of a common card, 1 of a rare one.
+        public readonly Dictionary<string, int> Copies = new Dictionary<string, int>();
 
         public readonly Dictionary<string, string> names = new Dictionary<string, string>();
 
