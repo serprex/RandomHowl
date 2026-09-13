@@ -198,6 +198,7 @@ namespace RandomHowl
                               Rule(EntranceMode), Rule(SpiritMode), Rule(ElderPercent), Rule(GrantMode),
                               Rule(Scarce));
             Patches.Install(harmony, Logger, plan, SkipIntro.Value);
+            Materials.Install(harmony, Logger, world, plan);
 
             // Realms, recipes and the reveal live on shared card assets, not
             // scenes, so they are written here. They do nothing until cards are

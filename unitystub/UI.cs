@@ -22,7 +22,10 @@ namespace UnityEngine.UI
 {
     using UnityEngine.EventSystems;
 
-    public abstract class Graphic : UIBehaviour { }
+    public abstract class Graphic : UIBehaviour
+    {
+        public virtual Color color { get => throw null; set => throw null; }
+    }
 
     public abstract class MaskableGraphic : Graphic { }
 

@@ -97,6 +97,11 @@ In a randomized game, every menu tab and fast travel are open from the start,
 and the tutorial's "press ..." tips don't show. When a tutorial event waits
 for you to press a key, the mod presses it for you.
 
+The game's hints on the materials screen name vanilla places, so the mod adds
+its own: a material gets a green rim when it can still be found in the zone Ro
+is in. That means a pickup there she hasn't taken, or a drop from a spirit
+there. With `scarce_howls` on, only fights not yet beaten count.
+
 ## Options
 
 Everything on the in-game screen is also stored in
