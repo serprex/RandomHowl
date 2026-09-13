@@ -84,6 +84,9 @@ namespace RandomHowl
             // Reads the config as it fires, so the menu toggle works mid-run.
             Hook(harmony, "InputManager", "IsContinuePressed", nameof(ContinuePressed), true);
 
+            // A deleted save takes its randomizer settings with it.
+            Hook(harmony, "PersistantDataManager", "DeleteProfile", nameof(ProfileDeleted), true);
+
             if (!logos) return;
             var type = AccessTools.TypeByName("LogoIntroHandler");
             skipLogos = type == null ? null
@@ -359,24 +362,11 @@ namespace RandomHowl
             Guard("player energy", () => SetEnergy(__instance));
         }
 
-        /// Also called from the menu on Apply. Resources hands back the Player
-        /// prefab as well as any Ro already standing in a scene, and both want
-        /// writing — the prefab so the next one spawns with it.
-        public static void SetPlayerEnergy()
-        {
-            if (Registry.PlayerType == null) return;
-            Guard("player energy", () =>
-            {
-                foreach (var player in Resources.FindObjectsOfTypeAll(Registry.PlayerType))
-                    if (player != null) SetEnergy(player);
-            });
-        }
-
         static void SetEnergy(object player)
         {
             var stats = Fields.Get(player, "stats");
             if (stats == null) return;
-            Fields.Set(stats, "maxMana", Plugin.Instance.PlayerEnergy.Value);
+            Fields.Set(stats, "maxMana", Plugin.Rule(Plugin.Instance.PlayerEnergy));
         }
 
         // --- scarce howls ------------------------------------------
@@ -386,7 +376,7 @@ namespace RandomHowl
         /// the cost panel and the spend all see the same nothing.
         public static bool CardHowlCost(ref int __result)
         {
-            if (!Plugin.Instance.Scarce.Value) return true;
+            if (!Plugin.Rule(Plugin.Instance.Scarce)) return true;
             __result = 0;
             return false;
         }
@@ -396,7 +386,7 @@ namespace RandomHowl
         /// rate that is about a hundred tears against the 76 the skill tree wants.
         public static bool TearHowlCost(ref int __result)
         {
-            if (!Plugin.Instance.Scarce.Value) return true;
+            if (!Plugin.Rule(Plugin.Instance.Scarce)) return true;
             __result = 15;
             return false;
         }
@@ -409,7 +399,7 @@ namespace RandomHowl
         /// combat is blocked: howls handed over by a world event still count.
         public static bool HowlGained(int amount)
         {
-            if (!Plugin.Instance.Scarce.Value || amount <= 0) return true;
+            if (!Plugin.Rule(Plugin.Instance.Scarce) || amount <= 0) return true;
             var beaten = false;
             Guard("howl reward", () => beaten = InRefight());
             return !beaten;
@@ -424,7 +414,7 @@ namespace RandomHowl
         /// before it reads the list.
         public static void LootLanding(object __instance, object arena)
         {
-            if (!Plugin.Instance.Scarce.Value) return;
+            if (!Plugin.Rule(Plugin.Instance.Scarce)) return;
             Guard("loot drop", () =>
             {
                 var loot = Fields.Get(__instance, "loot") as IList;
@@ -466,7 +456,7 @@ namespace RandomHowl
         /// about for the fight's next respawn to clear away.
         public static void LootLanded(object drop)
         {
-            if (!Plugin.Instance.Scarce.Value) return;
+            if (!Plugin.Rule(Plugin.Instance.Scarce)) return;
             Guard("loot pickup", () =>
             {
                 var item = drop as Behaviour;
@@ -481,7 +471,7 @@ namespace RandomHowl
         /// takes the item out of the world before the part that can fail.
         public static void LeftoversCollected(object __instance)
         {
-            if (!Plugin.Instance.Scarce.Value) return;
+            if (!Plugin.Rule(Plugin.Instance.Scarce)) return;
             Guard("loot leftovers", () =>
             {
                 var id = Registry.Uuid(((Component)__instance).gameObject);
@@ -542,7 +532,7 @@ namespace RandomHowl
         /// stash back next frame.
         public static bool HowlsDropped(ref int value)
         {
-            if (!Plugin.Instance.Scarce.Value || value <= 0) return true;
+            if (!Plugin.Rule(Plugin.Instance.Scarce) || value <= 0) return true;
             value = 0;
             var data = Manager("LiveGameDataManager");
             var player = Manager("Player");
@@ -581,12 +571,17 @@ namespace RandomHowl
             UnlockMenus();
         }
 
+        public static void ProfileDeleted(int profileSaveSlot)
+        {
+            Plugin.Instance.ForgetProfile(profileSaveSlot);
+        }
+
         /// Every craftable card is known from the start, so the juice bar that
         /// reveals four at a time has nothing left to reveal. The realms are
         /// opened with them, or the cards would be behind a locked tab.
         public static void RevealAllCards()
         {
-            if (!Plugin.Instance.RevealCards.Value) return;
+            if (!Plugin.Rule(Plugin.Instance.RevealCards)) return;
             var data = Manager("LiveGameDataManager");
             if (data == null) return;
             Guard("card reveal", () =>
@@ -689,8 +684,10 @@ namespace RandomHowl
         /// The tutorial's first event turns every tab off when its scene
         /// loads, including when a save made there is loaded again. Saving is
         /// left alone: the early events act differently while it is off.
+        /// A game that isn't randomized keeps its tutorial.
         public static void UnlockMenus()
         {
+            if (!Plugin.Randomized) return;
             var data = Manager("LiveGameDataManager");
             if (data == null) return;
             Guard("menu unlock", () =>
@@ -704,6 +701,7 @@ namespace RandomHowl
         /// so that button gets pressed instead.
         public static bool TipShown(string text)
         {
+            if (!Plugin.Randomized) return true;
             var show = true;
             Guard("tutorial tip", () =>
             {
@@ -728,19 +726,19 @@ namespace RandomHowl
         /// For tips that don't hold up an event.
         public static bool SkipTip()
         {
-            return false;
+            return !Plugin.Randomized;
         }
 
         /// The event waits for the totem button right after this tip.
         public static void TotemTip()
         {
-            Press(TotemButton);
+            if (Plugin.Randomized) Press(TotemButton);
         }
 
         /// The event waits for the card menu to open right after this tip.
         public static void CraftingTip()
         {
-            Press(CardButton);
+            if (Plugin.Randomized) Press(CardButton);
         }
 
         static void Press(string button)

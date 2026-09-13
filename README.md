@@ -71,23 +71,38 @@ Death Howl/BepInEx/plugins/RandomHowl/
 2. On the title screen, open **RANDOMIZER** (under SETTINGS).
 3. Enter a seed, or leave it empty for a random one, and pick your options.
    Changes save right away.
-4. Start a **new game**. Use a fresh save slot; older saves don't mix well with
-   a randomized world.
+4. Start a **new game** in **custom mode**, with the **RANDOMIZER** row at the
+   top of the custom mode screen on. Normal and rebirth games are never
+   randomized, and neither is a custom game with that row off. The mod unlocks
+   custom mode, so you don't have to beat rebirth mode first. Your settings
+   are copied into that save, so changing them later only affects new games.
 
 If the spoiler log is on, it is written next to the plugin as
 `spoiler-<seed>.txt`.
 
-Every menu tab and fast travel are open from the start, and the tutorial's
-"press ..." tips don't show. When a tutorial event waits for you to press a
-key, the mod presses it for you.
+In a randomized game, every menu tab and fast travel are open from the start,
+and the tutorial's "press ..." tips don't show. When a tutorial event waits
+for you to press a key, the mod presses it for you.
 
 ## Options
 
 Everything on the in-game screen is also stored in
-`BepInEx/config/randomhowl.cfg`, which you can edit by hand:
+`BepInEx/config/randomhowl.cfg`, which you can edit by hand. These are the
+settings new games get.
+
+When a new game starts, whether it is randomized is saved to
+`profile_<N>.randomhowl.cfg` in the game's `saves_v_1_0` folder, next to that
+save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
+`auto_text` and `spoiler_log` is copied there too. Loading the save uses that
+copy, so edit it to change a game already in progress. A save with no copy
+isn't randomized. Deleting a save in game deletes its copy too.
+
+A game that isn't randomized plays like vanilla: nothing is shuffled, the rules
+below are off, and the tutorial runs as normal. Only the extras still apply.
 
 | Setting | Values | What it does |
 | --- | --- | --- |
+| `enabled` | true / false | Whether a new custom mode game is randomized. Same as the RANDOMIZER row on the custom mode screen |
 | `seed` | text | Same seed, same shuffle. Empty picks a random one |
 | `enemies` | `Off` / `On` / `Restricted` | Shuffle enemies between fights. Bosses never move. `Restricted` keeps elites in elite fights |
 | `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards. A reward card that nothing gives any more can be crafted instead, using the recipe of a card that took its place |

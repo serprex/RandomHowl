@@ -79,7 +79,12 @@ namespace RandomHowl
         /// back an enumerator that idles until Ready, then runs the game's own.
         public static bool HoldLoadFlow(object __instance, ref IEnumerator __result)
         {
-            if (Plugin.Instance.Ready) return true;
+            if (Plugin.Instance.Ready)
+            {
+                // The save slot is picked by now, so shuffle from its settings.
+                Plugin.Instance.OpenProfile();
+                return true;
+            }
             var blocker = Fields.Get(__instance, "blocker") as GameObject;
             if (blocker != null) blocker.SetActive(true);
             __result = WaitForWorld(__instance);
@@ -111,10 +116,52 @@ namespace RandomHowl
                                + "no randomizer screen; edit the config file instead");
                 return;
             }
-            if (!BuildScreen(source)) return;
+            // After the copy, so the copy doesn't get this row too.
+            var built = BuildScreen(source);
+            try { AddCustomRow(source); }
+            catch (Exception e) { log.LogError("no RANDOMIZER row on custom mode: " + e); }
+            UnlockCustomMode();
+            if (!built) return;
             KeepSelection(title);
             AddEntry(entry);
             log.LogInfo("randomizer screen added to the title menu");
+        }
+
+        // --- the custom mode screen -----------------------------------------
+
+        /// Only custom mode games are randomized, so the custom mode screen
+        /// gets a RANDOMIZER row at the top to pick rando or not.
+        static void AddCustomRow(Component menu)
+        {
+            var panel = Fields.Get(menu, "optionaPanel") as CanvasGroup;
+            var template = Fields.Get(menu, "rebirthCardSet") as Component;
+            if (panel == null || template == null)
+            {
+                log.LogWarning("the custom mode screen is not shaped the way we "
+                               + "expect — no RANDOMIZER row; custom games use "
+                               + "enabled from the config file");
+                return;
+            }
+            var rowSize = (template.transform as RectTransform)?.sizeDelta ?? Vector2.zero;
+            var row = AddToggle(panel.transform, template, "RANDOMIZER", Plugin.Instance.Enabled);
+            row.transform.SetAsFirstSibling();
+            // Controller navigation goes down this list.
+            var options = Fields.Get(menu, "allOptions") as IList;
+            if (options != null) options.Insert(0, row);
+            // Ten rows don't fit in the game's one column.
+            TwoColumns(panel.transform, rowSize);
+        }
+
+        /// The game keeps custom mode locked until rebirth mode is beaten.
+        /// That is the only way to a randomized game, so open it.
+        static void UnlockCustomMode()
+        {
+            var type = AccessTools.TypeByName("PersistantDataManager");
+            var settings = type == null ? null
+                : AccessTools.Method(type, "GetSettings")?.Invoke(null, null);
+            if (settings == null || !Fields.Set(settings, "customModeUnlocked", true))
+                log.LogWarning("could not unlock custom mode, so a game can only be "
+                               + "randomized once rebirth mode is beaten");
         }
 
         // --- the title menu entry -------------------------------------------
@@ -260,16 +307,17 @@ namespace RandomHowl
             grid.startAxis = GridLayoutGroup.Axis.Vertical;
         }
 
-        static void AddToggle(Transform list, Component template, string label,
-                              ConfigEntry<bool> config)
+        static GameObject AddToggle(Transform list, Component template, string label,
+                                    ConfigEntry<bool> config)
         {
             var go = UnityEngine.Object.Instantiate(template.gameObject, list);
             go.name = label;
-            var row = go.GetComponent(rowType);
+            var row = go.GetComponent(template.GetType());
             Describe(row, label);
             var entry = go.AddComponent<OptionRow>();
             entry.Config = config;
             Wire(row, typeof(bool), config.Value, entry, "Changed");
+            return go;
         }
 
         /// A row that clicks through a list of values instead of on and off.
@@ -407,15 +455,15 @@ namespace RandomHowl
             screens.Add(screen);
         }
 
-        /// Save, then redo the shuffle if there is a world to shuffle yet. If
-        /// the scan is still running it will pick these values up on its own.
+        /// Save only. The screen is on the title menu, and starting a run
+        /// shuffles from the save's settings anyway, so shuffling here on
+        /// every change would just stutter the menu.
         internal static void Apply()
         {
             var plugin = Plugin.Instance;
             plugin.Config.Save();
-            if (!plugin.Ready) return;
-            plugin.Rebuild();
-            Patches.SetPlayerEnergy();
+            // The screen edits what new games get, not the last save played.
+            plugin.CloseProfile();
         }
 
         static void Describe(Component row, string text)

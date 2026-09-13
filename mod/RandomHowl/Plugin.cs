@@ -24,7 +24,10 @@ namespace RandomHowl
         public const string Version = "1.0.0";
         public static Plugin Instance { get; private set; }
 
-        // Live config entries, read by the screen and by Plan.Build.
+        // Live config entries, edited by the screen. These are the settings a
+        // new game gets. Anything a run uses is read through Rule, so each
+        // save keeps its own copy.
+        public ConfigEntry<bool> Enabled;
         public ConfigEntry<string> Seed;
         public Dictionary<string, ConfigEntry<bool>> Shuffles;
         public ConfigEntry<EntranceShuffle> EntranceMode;
@@ -48,10 +51,21 @@ namespace RandomHowl
         object gameData;
         bool cardsPending;
 
+        // The settings file of the save being played. Null means the menu's
+        // own settings.
+        ConfigFile profile;
+        const string ProfileExtension = ".randomhowl.cfg";
+
+        // What each game setting is when a save isn't randomized.
+        Dictionary<ConfigEntryBase, object> vanilla;
+
         void Awake()
         {
             Instance = this;
 
+            Enabled = Config.Bind("randomizer", "enabled", true,
+                "whether the game is randomized. Only a custom mode game can be. "
+                + "This is the RANDOMIZER row on the custom mode screen");
             Seed = Config.Bind("randomizer", "seed", "", "same seed same shuffle");
 
             // Each toggle is seeded on its own, so turning one off leaves the
@@ -117,6 +131,19 @@ namespace RandomHowl
             SpoilerLog = Config.Bind("extras", "spoiler_log", true,
                 "write spoiler-<seed>.txt next to this plugin");
 
+            vanilla = new Dictionary<ConfigEntryBase, object>
+            {
+                { Seed, "" },
+                { EntranceMode, EntranceShuffle.Off },
+                { EnemyMode, EnemyShuffle.Off },
+                { GrantMode, GrantShuffle.Off },
+                { ElitePercent, -1 },
+                { PlayerEnergy, 5 },
+                { Scarce, false },
+                { RevealCards, false },
+            };
+            foreach (var entry in Shuffles.Values) vanilla[entry] = false;
+
             // The logo skip and the menu screen go on now, and on their own
             // Harmony — Rebuild unpatches the shuffle and puts it back, and
             // neither of these has any business in that.
@@ -158,17 +185,18 @@ namespace RandomHowl
             Rebuild();
         }
 
-        /// Rebuild the plan from the current config and reinstall patches.
-        /// The screen calls this after a seed or toggle change. Every
-        /// patch writes on scene load, so the next new game is the new seed.
+        /// Rebuild the plan from the settings of the save being played (or the
+        /// menu's, at the title screen) and reinstall patches. Starting a run
+        /// calls this; changing settings on the screen doesn't.
         public void Rebuild()
         {
             if (harmony != null) harmony.UnpatchSelf();
             harmony = new Harmony(Id);
 
-            plan = Plan.Build(world, Seed.Value, name => Shuffles[name].Value,
-                              EntranceMode.Value, EnemyMode.Value, ElitePercent.Value, GrantMode.Value,
-                              Scarce.Value);
+            var seed = Rule(Seed);
+            plan = Plan.Build(world, seed, name => Rule(Shuffles[name]),
+                              Rule(EntranceMode), Rule(EnemyMode), Rule(ElitePercent), Rule(GrantMode),
+                              Rule(Scarce));
             Patches.Install(harmony, Logger, plan, SkipIntro.Value);
 
             // Realms, recipes and the reveal sit on the shared card assets,
@@ -181,11 +209,137 @@ namespace RandomHowl
             Logger.LogInfo(string.Format(
                 "seed {0}: {1} pickups, {2} totems, {3} cave mouths, {4} arenas, "
                 + "{5} cards, {6} recipes, {7} card gifts",
-                Seed.Value, plan.Ingredients.Count, plan.Totems.Count,
+                seed, plan.Ingredients.Count, plan.Totems.Count,
                 plan.Entrances.Count, plan.Enemies.Count, plan.Cards.Count,
                 plan.Recipes.Count, plan.Grants.Count));
 
-            if (SpoilerLog.Value) Spoil(Seed.Value, plan);
+            if (SpoilerLog.Value && Randomized) Spoil(seed, plan);
+        }
+
+        /// A setting as the save being played has it. Each save keeps its own
+        /// copy, so changing the menu later only affects new games. A save
+        /// that isn't randomized gets the vanilla value.
+        public static T Rule<T>(ConfigEntry<T> entry)
+        {
+            var plugin = Instance;
+            var file = plugin.profile;
+            if (file == null) return entry.Value;
+            object off;
+            if (!Randomized && plugin.vanilla.TryGetValue(entry, out off)) return (T)off;
+            return file.Bind(entry.Definition, entry.Value, entry.Description).Value;
+        }
+
+        /// Whether the save being played is randomized. At the title screen
+        /// the menu's settings are shown as a randomized game.
+        public static bool Randomized
+        {
+            get
+            {
+                var plugin = Instance;
+                return plugin.profile == null
+                    || plugin.profile.Bind(plugin.Enabled.Definition, false,
+                                           plugin.Enabled.Description).Value;
+            }
+        }
+
+        /// Runs as a run starts, once the save slot is picked. A new game copies
+        /// the menu settings next to its save, if it is a randomized custom
+        /// mode game. A loaded game reads its copy back. A save with no copy
+        /// isn't randomized.
+        public void OpenProfile()
+        {
+            profile = null;
+            try
+            {
+                var path = SlotPath(null);
+                if (path == null)
+                {
+                    Logger.LogWarning("can't find the save folder, so every save "
+                                      + "uses the menu settings");
+                }
+                else
+                {
+                    // No save yet means a new game, so any old copy is stale.
+                    var fresh = !File.Exists(path + ".save");
+                    if (fresh) File.Delete(path + ProfileExtension);
+                    var file = new ConfigFile(path + ProfileExtension, false);
+                    file.SaveOnConfigSet = false;
+                    profile = file;
+                    // A save with no settings file isn't randomized.
+                    var randomized = file.Bind(Enabled.Definition, false, Enabled.Description);
+                    if (fresh) randomized.Value = CustomMode() && Enabled.Value;
+                    if (randomized.Value)
+                    {
+                        // Read every setting once, so the whole set is copied
+                        // now and not whenever each one is first used.
+                        Rule(Seed);
+                        foreach (var entry in Shuffles.Values) Rule(entry);
+                        Rule(EntranceMode);
+                        Rule(EnemyMode);
+                        Rule(GrantMode);
+                        Rule(ElitePercent);
+                        Rule(PlayerEnergy);
+                        Rule(Scarce);
+                        Rule(RevealCards);
+                    }
+                    file.Save();
+                    Logger.LogInfo((randomized.Value ? "randomized" : "not randomized")
+                                   + ", settings for this save: " + file.ConfigFilePath);
+                }
+            }
+            catch (Exception e)
+            {
+                profile = null;
+                Logger.LogWarning("could not read this save's settings, using the "
+                                  + "menu's: " + e.Message);
+            }
+            Rebuild();
+        }
+
+        /// Whether the new game about to start is custom mode. Normal and
+        /// rebirth games are never randomized.
+        static bool CustomMode()
+        {
+            var type = AccessTools.TypeByName("TitleMenu");
+            var settings = type == null ? null
+                : AccessTools.Field(type, "lastSelcetedModeSettings")?.GetValue(null);
+            return settings != null && Fields.Get(settings, "mode") as int? == 2;
+        }
+
+        /// Go back to the menu's settings.
+        public void CloseProfile()
+        {
+            profile = null;
+        }
+
+        /// A deleted save takes its settings with it.
+        public void ForgetProfile(int slot)
+        {
+            var path = SlotPath(slot);
+            if (path == null) return;
+            try { File.Delete(path + ProfileExtension); }
+            catch (Exception e)
+            {
+                Logger.LogWarning("could not delete " + path + ProfileExtension + ": " + e.Message);
+            }
+        }
+
+        /// Where the game keeps a save slot, without the extension. A null slot
+        /// means the one the player picked. Null if the game's save manager
+        /// isn't shaped the way we expect.
+        static string SlotPath(int? slot)
+        {
+            var type = AccessTools.TypeByName("PersistantDataManager");
+            var folder = type == null ? null
+                : AccessTools.Field(type, "baseSavePath")?.GetValue(null) as string;
+            if (folder == null) return null;
+            if (slot == null)
+            {
+                var settings = AccessTools.Method(type, "GetSettings")?.Invoke(null, null);
+                slot = settings == null ? null : Fields.Get(settings, "chosenProfile") as int?;
+                if (slot == null) return null;
+            }
+            return Path.Combine(folder, "profile_" + slot.Value);
         }
 
         void Spoil(string seed, Plan plan)
