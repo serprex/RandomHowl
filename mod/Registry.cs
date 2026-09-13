@@ -38,8 +38,20 @@ namespace RandomHowl
         public static UnityEngine.Object Realm(string guid) { return cardTypes.Find(guid); }
         public static UnityEngine.Object Area(string name) { return areas.Find(name); }
 
+        /// Spirit prefabs seen while mapping the world. Holding them here stops
+        /// Unity from freeing them when a game starts, so a spirit moved into a
+        /// scene that doesn't use it can still be found.
+        static readonly Dictionary<string, GameObject> held = new Dictionary<string, GameObject>();
+
+        public static void Hold(GameObject prefab)
+        {
+            if (prefab != null && !held.ContainsKey(prefab.name)) held[prefab.name] = prefab;
+        }
+
         public static GameObject Spirit(string name)
         {
+            GameObject prefab;
+            if (name != null && held.TryGetValue(name, out prefab) && prefab != null) return prefab;
             var found = spirits.Find(name);
             return found == null ? null : Root(found);
         }

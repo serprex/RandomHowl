@@ -86,10 +86,10 @@ namespace RandomHowl
                 + "every cave mouth and exit somewhere random. The way into a "
                 + "Fylge memory and back out never moves");
             SpiritMode = Config.Bind("shuffle", "spirits", SpiritShuffle.On,
-                "On puts any non-boss spirit anywhere. Bosses never move. "
-                + "Restricted swaps elder spirits only with elder spirits, and "
-                + "plain spirits only with plain ones. With elder_percent set, "
-                + "it keeps elder spirits in elder spirit fights instead");
+                "On puts any non-boss spirit anywhere. Environmental actors "
+                + "shuffle with each other. Restricted swaps elder spirits only "
+                + "with elder spirits, and plain spirits only with plain ones. "
+                + "With elder_percent set, it keeps elder spirits in elder spirit fights instead");
             GrantMode = Config.Bind("shuffle", "card_gifts", GrantShuffle.On,
                 "which card each reward gives: the aurora, and blood tears and "
                 + "skill nodes that grant a card. Everything adds elder spirit "

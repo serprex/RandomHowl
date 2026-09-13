@@ -476,6 +476,14 @@ namespace RandomHowl
         // Spirit ranks, and the arena type of an elder spirit fight.
         const int Elder = 1, Boss = 2, ElderArena = 1;
 
+        /// Things in spirit fights that aren't spirits. They only swap with
+        /// each other, never with spirits.
+        static readonly HashSet<string> Environmental = new HashSet<string>
+        {
+            "Lifeblood (ThornyBushSpecialTile)", "BerryTree", "SwirlOfFrailty", "SwirlOfStrength", "ExplodingPlant",
+            "TotemRock",
+        };
+
         /// Spirits move as species, not prefabs: Owl and OwlElite are one
         /// spirit in two forms. The shuffle moves spirits, then the dial picks
         /// which are elder spirits, keeping both forms of each spirit somewhere
@@ -514,22 +522,37 @@ namespace RandomHowl
 
             // Move the spirits. Boss tier stays put, so boss fights stay
             // vanilla. Strict shuffles elder and plain spots separately.
+            // Environmental things only swap with each other.
             var order = new int[slots.Count];
             for (var i = 0; i < order.Length; i++) order[i] = i;
             var pinned = new bool[slots.Count];
+            var environmental = new bool[slots.Count];
             for (var i = 0; i < slots.Count; i++)
-                pinned[i] = IsBossTier(slots[i].Value, world.Rarity, plain);
+            {
+                environmental[i] = Environmental.Contains(slots[i].Value);
+                pinned[i] = !environmental[i] && IsBossTier(slots[i].Value, world.Rarity, plain);
+            }
             var rng = new Rng(seed + ":spirits");
-            if (strict)
+            if (mode != SpiritShuffle.Off)
             {
                 var skip = new bool[slots.Count];
-                for (var i = 0; i < slots.Count; i++) skip[i] = pinned[i] || wasElder[i];
+                for (var i = 0; i < slots.Count; i++) skip[i] = !environmental[i];
                 Shuffle(order, skip, rng);
-                for (var i = 0; i < slots.Count; i++) skip[i] = pinned[i] || !wasElder[i];
-                Shuffle(order, skip, rng);
+                if (strict)
+                {
+                    for (var i = 0; i < slots.Count; i++)
+                        skip[i] = pinned[i] || environmental[i] || wasElder[i];
+                    Shuffle(order, skip, rng);
+                    for (var i = 0; i < slots.Count; i++)
+                        skip[i] = pinned[i] || environmental[i] || !wasElder[i];
+                    Shuffle(order, skip, rng);
+                }
+                else
+                {
+                    for (var i = 0; i < slots.Count; i++) skip[i] = pinned[i] || environmental[i];
+                    Shuffle(order, skip, rng);
+                }
             }
-            else if (mode != SpiritShuffle.Off)
-                Shuffle(order, pinned, rng);
 
             var moved = new string[slots.Count];
             var isElder = new bool[slots.Count];
@@ -538,6 +561,11 @@ namespace RandomHowl
                 moved[i] = species[order[i]];
                 isElder[i] = wasElder[order[i]];
             }
+
+            // Environmental things are done moving. Pin them so scarce howls
+            // can't hand their spots to spirits. Their drops get picked along
+            // with the bosses'.
+            for (var i = 0; i < slots.Count; i++) pinned[i] |= environmental[i];
 
             // Then the dial. It runs whenever anything moves, since its
             // one-of-each-form seed keeps every ingredient in the world; a

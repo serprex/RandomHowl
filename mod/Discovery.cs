@@ -483,8 +483,9 @@ namespace RandomHowl
         /// an Owl from an OwlElite.
         static void Rank(UnityEngine.Object prefab, World world)
         {
-            if (world.Rarity.ContainsKey(prefab.name)) return;
             var go = prefab as GameObject;
+            Registry.Hold(go);
+            if (world.Rarity.ContainsKey(prefab.name)) return;
             if (go == null) return;
             var spirit = Registry.EnemyType == null ? null : go.GetComponent(Registry.EnemyType);
             var drops = spirit == null ? null : Fields.Get(spirit, "lootDrops") as IList;
