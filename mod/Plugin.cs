@@ -107,7 +107,9 @@ namespace RandomHowl
 
             PlayerEnergy = Config.Bind("combat", "player_energy", 5,
                 new ConfigDescription(
-                    "Ro's energy per turn before totems and skills add to it",
+                    "Ro's energy per turn in a custom mode game, before totems "
+                    + "and skills add to it. This is the ENERGY row on the custom "
+                    + "mode screen",
                     new AcceptableValueRange<int>(1, 20)));
 
             Scarce = Config.Bind("rules", "scarce_howls", false,
@@ -138,7 +140,6 @@ namespace RandomHowl
                 { EnemyMode, EnemyShuffle.Off },
                 { GrantMode, GrantShuffle.Off },
                 { ElitePercent, -1 },
-                { PlayerEnergy, 5 },
                 { Scarce, false },
                 { RevealCards, false },
             };
@@ -150,6 +151,7 @@ namespace RandomHowl
             var extras = new Harmony(Id + ".extras");
             Patches.InstallExtras(extras, Logger, SkipLogos.Value);
             Options.Install(extras, Logger);
+            Custom.Install(extras, Logger);
 
             // Map the world, then shuffle and patch. The scan runs as a
             // coroutine during the splash screen so it never stalls the game.
@@ -268,6 +270,10 @@ namespace RandomHowl
                     // A save with no settings file isn't randomized.
                     var randomized = file.Bind(Enabled.Definition, false, Enabled.Description);
                     if (fresh) randomized.Value = CustomMode() && Enabled.Value;
+                    // Energy is on the custom mode screen, so every custom
+                    // game gets it. Older saves without it play at 5.
+                    var energy = file.Bind(PlayerEnergy.Definition, 5, PlayerEnergy.Description);
+                    if (fresh) energy.Value = CustomMode() ? PlayerEnergy.Value : 5;
                     if (randomized.Value)
                     {
                         // Read every setting once, so the whole set is copied
@@ -278,7 +284,6 @@ namespace RandomHowl
                         Rule(EnemyMode);
                         Rule(GrantMode);
                         Rule(ElitePercent);
-                        Rule(PlayerEnergy);
                         Rule(Scarce);
                         Rule(RevealCards);
                     }

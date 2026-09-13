@@ -80,6 +80,16 @@ Death Howl/BepInEx/plugins/RandomHowl/
 If the spoiler log is on, it is written next to the plugin as
 `spoiler-<seed>.txt`.
 
+The mod also changes the custom mode screen, in any custom mode game,
+randomized or not:
+
+- **ENERGY**, Ro's energy per turn, sits next to Ro's health.
+- "These cards cost 1 more" is split into a toggle for each kind of card, so
+  more than one can be on.
+- "Realm cards cost 1 more" has an **ALL REALMS** choice: both foreign cards
+  and cards from the realm you're in cost 1 more. Basic, quest, spirit and
+  curse cards are left out, as the game's own realm choices do.
+
 In a randomized game, every menu tab and fast travel are open from the start,
 and the tutorial's "press ..." tips don't show. When a tutorial event waits
 for you to press a key, the mod presses it for you.
@@ -112,7 +122,7 @@ below are off, and the tutorial runs as normal. Only the extras still apply.
 | `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. The way into a Fylge memory and back out never moves |
 | `card_realms` | true / false | Shuffle which realm each card belongs to |
 | `recipes` | true / false | Shuffle which ingredients each card needs |
-| `player_energy` | `1` to `20` | Ro's energy per turn, before totems and skills. Vanilla is 5 |
+| `player_energy` | `1` to `20` | Ro's energy per turn in a custom mode game, before totems and skills. Same as the ENERGY row on the custom mode screen. Copied into every custom mode save, randomized or not. Vanilla is 5 |
 | `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay no howls or ingredients again. Howls are only spent on skill points. Enemies are placed so there's enough ingredients to craft every card up to its default copy limit |
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
 | `skip_logos` | true / false | Skip the publisher logos |

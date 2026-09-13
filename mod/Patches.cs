@@ -811,7 +811,7 @@ namespace RandomHowl
         /// One of the game's manager singletons. Its Instance sits behind a
         /// generic base class, so it is less work to ask Unity for the object.
         /// Kept until the scene it lives in goes away and it turns null.
-        static UnityEngine.Object Manager(string name)
+        internal static UnityEngine.Object Manager(string name)
         {
             UnityEngine.Object found;
             if (managers.TryGetValue(name, out found) && found != null) return found;

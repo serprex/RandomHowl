@@ -46,8 +46,6 @@ namespace RandomHowl
         static readonly int[] ElitePercentValues =
             { -1, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 
-        static readonly int[] EnergyValues = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-
         public static void Install(Harmony harmony, ManualLogSource logger)
         {
             log = logger;
@@ -261,9 +259,6 @@ namespace RandomHowl
             AddChoice(list, template, "ELITE%", ElitePercentLabels,
                       ElitePercentValues, true, plugin.ElitePercent.Value,
                       value => plugin.ElitePercent.Value = value);
-            AddChoice(list, template, "ENERGY", null, EnergyValues, false,
-                      plugin.PlayerEnergy.Value,
-                      value => plugin.PlayerEnergy.Value = value);
             AddToggle(list, template, "SCARCE HOWLS", plugin.Scarce);
             AddToggle(list, template, "CARDS UNLOCKED", plugin.RevealCards);
             AddToggle(list, template, "SKIP LOGOS", plugin.SkipLogos);
@@ -290,7 +285,7 @@ namespace RandomHowl
         }
 
         /// Game fits nine rows in one column
-        static void TwoColumns(Transform list, Vector2 rowSize)
+        internal static void TwoColumns(Transform list, Vector2 rowSize)
         {
             if (rowSize.x <= 0f || rowSize.y <= 0f) return;
             var column = list.GetComponent<VerticalLayoutGroup>();
@@ -324,23 +319,24 @@ namespace RandomHowl
         /// The game's own custom mode screen has rows like this — its enemy
         /// health one is a percentage in eight steps — so the row already
         /// knows how to draw them, and all we hand it is the list.
-        static void AddChoice(Transform list, Component template, string label,
-                              string[] labels, int[] values, bool percent,
-                              int current, Action<int> chosen)
+        internal static GameObject AddChoice(Transform list, Component template, string label,
+                                             string[] labels, int[] values, bool percent,
+                                             int current, Action<int> chosen)
         {
             var go = UnityEngine.Object.Instantiate(template.gameObject, list);
             go.name = label;
-            var row = go.GetComponent(rowType);
+            var row = go.GetComponent(template.GetType());
             Describe(row, label);
             if (!SetChoices(row, labels, values, percent))
             {
                 UnityEngine.Object.Destroy(go);
-                return;
+                return null;
             }
             var entry = go.AddComponent<ValueRow>();
             entry.Values = values;
             entry.Chosen = chosen;
             Wire(row, typeof(int), Nearest(values, current), entry, "Changed");
+            return go;
         }
 
         /// Replace the row's on/off pair with our own choices. An entry with no
@@ -370,9 +366,7 @@ namespace RandomHowl
                 var choice = Activator.CreateInstance(choiceType);
                 if (labels != null && i < labels.Length && labels[i] != null)
                 {
-                    var text = ScriptableObject.CreateInstance(textType);
-                    Fields.Set(text, "text", labels[i]);
-                    Fields.Set(choice, "text", text);
+                    SetLabel(choice, textType, labels[i]);
                 }
                 else
                 {
@@ -389,9 +383,17 @@ namespace RandomHowl
             return true;
         }
 
+        /// Give one of a row's choices our own text.
+        internal static void SetLabel(object choice, Type textType, string label)
+        {
+            var text = ScriptableObject.CreateInstance(textType);
+            Fields.Set(text, "text", label);
+            Fields.Set(choice, "text", text);
+        }
+
         /// Which entry a config value shows as. Someone may have typed a number
         /// into the config file that isn't one of ours, so take the closest.
-        static int Nearest(int[] values, int current)
+        internal static int Nearest(int[] values, int current)
         {
             var best = 0;
             for (var i = 1; i < values.Length; i++)
@@ -466,7 +468,7 @@ namespace RandomHowl
             plugin.CloseProfile();
         }
 
-        static void Describe(Component row, string text)
+        internal static void Describe(Component row, string text)
         {
             var label = Fields.Get(row, "descriptionDisplay") as Text;
             if (label == null) return;
