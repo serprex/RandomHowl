@@ -34,11 +34,11 @@ BepInEx and Unity files from the game folder.
 Point the build at the game's `Death Howl_Data` folder:
 
 ```
-dotnet build mod/RandomHowl -c Release -p:GameDir="/path/to/Death Howl/Death Howl_Data"
+dotnet build mod -c Release -p:GameDir="/path/to/Death Howl/Death Howl_Data"
 ```
 
 Instead of passing `GameDir` every time, you can set the `DEATH_HOWL_DATA`
-environment variable, or create `mod/RandomHowl/Local.props`:
+environment variable, or create `mod/Local.props`:
 
 ```xml
 <Project>
@@ -58,7 +58,7 @@ The build stops with an error if it can't find the game or BepInEx.
 ## 3. Install
 
 If you set `PluginDir`, the build already copied the plugin. Otherwise copy
-`mod/RandomHowl/bin/Release/RandomHowl.dll` to:
+`mod/bin/Release/RandomHowl.dll` to:
 
 ```
 Death Howl/BepInEx/plugins/RandomHowl/
