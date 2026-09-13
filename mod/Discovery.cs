@@ -12,11 +12,15 @@ namespace RandomHowl
     /// Scans the world at startup, before any shuffling.
     ///
     /// Loads each level scene additively, records every shufflable slot and its
-    /// vanilla value, then unloads it. Waits a frame between levels so the
-    /// splash screen stays responsive.
+    /// vanilla value, then starts unloading it and moves straight on to loading
+    /// the next level. Only yields after 20 ms, so menu stays responsive
     public static class Discovery
     {
         static ManualLogSource log;
+
+        // Time since we last gave a frame back to the game.
+        static readonly Stopwatch sinceYield = new Stopwatch();
+        const long YieldBudgetMs = 20;
 
         public static IEnumerator Scan(ManualLogSource logger, Action<World> done)
         {
@@ -28,12 +32,37 @@ namespace RandomHowl
 
             var count = SceneManager.sceneCountInBuildSettings;
             log.LogInfo("discovery: scanning " + count + " build scenes");
+
+            // By default Unity only spends a few ms per frame finishing a scene
+            // load, so most of the scan is waiting. Let it use more while we
+            // scan.
+            var priority = Application.backgroundLoadingPriority;
+            Application.backgroundLoadingPriority = ThreadPriority.High;
+            sinceYield.Restart();
             for (var i = 0; i < count; i++)
             {
                 if (!SkipScenes.Contains(SceneNameAt(i)))
-                    yield return LoadAndScan(i, world);
-                yield return null;   // keep the splash screen responsive
+                {
+                    // Step through by hand rather than yielding the inner
+                    // coroutine, so moving between the two costs no frame.
+                    var inner = LoadAndScan(i, world);
+                    while (inner.MoveNext()) yield return inner.Current;
+                }
+                if (sinceYield.ElapsedMilliseconds > YieldBudgetMs)
+                {
+                    yield return null;   // keep the splash screen responsive
+                    sinceYield.Restart();
+                }
             }
+
+            // Let the last level finish unloading before the game carries on.
+            if (unloading != null)
+                while (!unloading.isDone) yield return null;
+            unloading = null;
+
+            // Put it back, unless the game changed it meanwhile.
+            if (Application.backgroundLoadingPriority == ThreadPriority.High)
+                Application.backgroundLoadingPriority = priority;
 
             log.LogInfo(string.Format(
                         "discovery: {0} pickups, {1} totems, {2} cave mouths, {3} arena slots "
@@ -254,12 +283,10 @@ namespace RandomHowl
 
         // --- level discovery ----------------------------------------------
 
-        // Boot and global scenes. Loading one would run its managers again, and
-        // some use DontDestroyOnLoad, leaking duplicates into the game. They
-        // hold no slots, so skip them.
         static readonly HashSet<string> SkipScenes = new HashSet<string>
         {
             "CompanyLogos", "TitleMenu", "Credits", "Main (Managers)",
+            "CaveTemplate", "CaveCBackup", "PostGameClearingScene", "PostGameHutScene",
         };
 
         /// Scene name for a build index, before it is loaded.
@@ -282,7 +309,11 @@ namespace RandomHowl
             var clock = Stopwatch.StartNew();
             var op = SceneManager.LoadSceneAsync(index, LoadSceneMode.Additive);
             if (op == null) yield break;
-            while (!op.isDone) yield return null;
+            while (!op.isDone)
+            {
+                yield return null;
+                sinceYield.Restart();
+            }
             var loaded = clock.ElapsedMilliseconds;
 
             // Look up by build index, not "last scene in the list". The game
@@ -310,9 +341,13 @@ namespace RandomHowl
                                       name, Count(world) - before, loaded,
                                       clock.ElapsedMilliseconds));
 
-            var unload = SceneManager.UnloadSceneAsync(scene);
-            if (unload != null) while (!unload.isDone) yield return null;
+            // Don't wait for the unload. Unity runs scene loads/unloads in order,
+            // so next load starts immediately after
+            unloading = SceneManager.UnloadSceneAsync(scene);
         }
+
+        // The last scene we started unloading, which may not be done yet.
+        static AsyncOperation unloading;
 
         static int Count(World w)
         {
