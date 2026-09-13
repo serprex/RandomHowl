@@ -600,9 +600,16 @@ namespace RandomHowl
             }
         }
 
+        /// Elder spirits the rule below misses: the game ranks them common, or
+        /// their name doesn't match.
+        static readonly Dictionary<string, string> ExtraElders = new Dictionary<string, string>
+        {
+            { "SpiderElite", "Spider" }, { "WalrusElite", "Walrus" }, { "WormElite", "Worm" },
+            { "FloatingRockEliteNew", "FloatingRock" },
+        };
+
         /// Which spirits have two forms. The elder one is named after the
-        /// common one (OwlElite, Owl), but only the prefab's rank is reliable;
-        /// a few "Elite" names are ranked common.
+        /// common one (OwlElite, Owl) and ranked elder, plus ones above.
         static void Pairs(Dictionary<string, int> rarity, Dictionary<string, string> elder,
                           Dictionary<string, string> plain)
         {
@@ -617,6 +624,12 @@ namespace RandomHowl
                 if (rarity[bare] != 0) continue;
                 elder[bare] = entry.Key;
                 plain[entry.Key] = bare;
+            }
+            foreach (var entry in ExtraElders)
+            {
+                if (!rarity.ContainsKey(entry.Key) || !rarity.ContainsKey(entry.Value)) continue;
+                elder[entry.Value] = entry.Key;
+                plain[entry.Key] = entry.Value;
             }
         }
 
