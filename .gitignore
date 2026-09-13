@@ -4,3 +4,5 @@ mod/obj/
 mod/Local.props
 build.sh
 private/
+unitystub/bin/
+unitystub/obj/

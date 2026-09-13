@@ -18,7 +18,7 @@
 
   <!-- BepInEx as installed in the game folder, and the game's own Unity
        assemblies, so the versions always match what will load this. -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(NuGetRefs)' != 'true'">
     <Reference Include="BepInEx">
       <HintPath>$(BepInExDir)/core/BepInEx.dll</HintPath>
       <Private>false</Private>
@@ -53,7 +53,17 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="CheckPaths" BeforeTargets="BeforeBuild">
+  <!-- Build without the game (CI): -p:NuGetRefs=true pulls references from
+       NuGet instead. Unity modules match the game's Unity 2022.3.62.
+       No UnityEngine.UI package exists for 2022, so that one comes from
+       the stub in unitystub/. -->
+  <ItemGroup Condition="'$(NuGetRefs)' == 'true'">
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" IncludeAssets="compile" PrivateAssets="all" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.62" IncludeAssets="compile" PrivateAssets="all" />
+    <ProjectReference Include="../unitystub/UnityEngine.UI.csproj" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CheckPaths" BeforeTargets="BeforeBuild" Condition="'$(NuGetRefs)' != 'true'">
     <Error Condition="!Exists('$(GameDir)/Managed/UnityEngine.dll')"
            Text="no game at '$(GameDir)' — build with -p:GameDir=... or set DEATH_HOWL_DATA" />
     <Error Condition="!Exists('$(BepInExDir)/core/BepInEx.dll')"
