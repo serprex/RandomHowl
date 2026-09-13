@@ -162,8 +162,12 @@ namespace RandomHowl
                 string guid;
                 if (!plan.Ingredients.TryGetValue(Keys.Uuid(item), out guid)) return;
                 var data = Registry.Item(guid);
-                if (data == null) Missing("ingredient", guid);
-                else Fields.Set(__instance, "data", data);
+                if (data == null) { Missing("ingredient", guid); return; }
+                Fields.Set(__instance, "data", data);
+                // show new ingredient's sprite too.
+                var renderer = Fields.Get(__instance, "spriteRenderer") as SpriteRenderer;
+                var sprite = Fields.Get(data, "IllustrationWorld") as Sprite;
+                if (renderer != null && sprite != null) renderer.sprite = sprite;
             });
         }
 
