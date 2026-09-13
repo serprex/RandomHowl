@@ -1,4 +1,4 @@
-A randomizer mod for Death Howl. It shuffles enemies, pickups, cave entrances,
+A randomizer mod for Death Howl. It shuffles spirits, pickups, cave entrances,
 card realms, recipes and card rewards based on a seed.
 
 It has no logic: nothing checks that a seed can be finished. Entrance and totem
@@ -117,16 +117,16 @@ below are off, and the tutorial runs as normal. Only the extras still apply.
 | --- | --- | --- |
 | `enabled` | true / false | Whether a new custom mode game is randomized. Same as the RANDOMIZER row on the custom mode screen |
 | `seed` | text | Same seed, same shuffle. Empty picks a random one |
-| `enemies` | `Off` / `On` / `Restricted` | Shuffle enemies between fights. Bosses never move. `Restricted` keeps elites in elite fights |
+| `spirits` | `Off` / `On` / `Restricted` | Shuffle spirits between fights. Bosses never move. `Restricted` swaps elder spirits only with elder spirits, and plain spirits only with plain ones. With `elder_percent` set, it keeps elder spirits in elder spirit fights instead |
 | `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards. A reward card that nothing gives any more can be crafted instead, using the recipe of a card that took its place |
-| `elite_percent` | `-1` to `100` | Share of enemies that appear in elite form. `-1` keeps the vanilla amount (about 23%) |
+| `elder_percent` | `-1` to `100` | Share of spirits that appear as elder spirits. With `spirits` set to `Restricted`, it only counts spirits in elder spirit fights. `-1` keeps the vanilla amount (about 23%) |
 | `totems` | true / false | Shuffle totem pickups |
 | `ingredients` | true / false | Shuffle ingredient pickups |
 | `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. The way into a Fylge memory and back out never moves |
 | `card_realms` | true / false | Shuffle which realm each card belongs to |
 | `recipes` | true / false | Shuffle which ingredients each card needs |
 | `player_energy` | `1` to `20` | Ro's energy per turn in a custom mode game, before totems and skills. Same as the ENERGY row on the custom mode screen. Copied into every custom mode save, randomized or not. Vanilla is 5 |
-| `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay no howls or ingredients again. Howls are only spent on skill points. Enemies are placed so there's enough ingredients to craft every card up to its default copy limit |
+| `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay no howls or ingredients again. Howls are only spent on skill points. Spirits are placed so there's enough ingredients to craft every card up to its default copy limit |
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
 | `skip_logos` | true / false | Skip the publisher logos |
 | `skip_intro` | true / false | Skip the opening cutscene |

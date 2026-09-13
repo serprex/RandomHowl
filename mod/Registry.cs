@@ -7,13 +7,13 @@ using UnityEngine;
 
 namespace RandomHowl
 {
-    /// Finds the game's own objects at runtime.
+    /// Finds the game's objects at runtime.
     ///
-    /// The table names values the way they survive a game restart: a GUID for
-    /// cards, items and totems, an asset name for areas and enemy prefabs.
-    /// Here we turn those back into live objects. Nothing is loaded on demand —
-    /// we look through what Unity already has in memory, which covers
-    /// everything the persistent manager scene pulls in.
+    /// Values are named in a way that survives restarts: a GUID for cards,
+    /// items and totems, an asset name for areas and spirit prefabs. This turns
+    /// them back into live objects. Nothing is loaded; it searches what Unity
+    /// already has in memory, which covers everything the persistent manager
+    /// scene brings in.
     public static class Registry
     {
         public static readonly Type ItemType = AccessTools.TypeByName("ItemData");
@@ -30,7 +30,7 @@ namespace RandomHowl
         static readonly Lookup cards = new Lookup(() => CardType, GuidOf);
         static readonly Lookup cardTypes = new Lookup(() => CardTypeType, GuidOf);
         static readonly Lookup areas = new Lookup(() => AreaType, o => o.name, true);
-        static readonly Lookup enemies = new Lookup(() => EnemyType, o => Root(o).name);
+        static readonly Lookup spirits = new Lookup(() => EnemyType, o => Root(o).name);
         static readonly Lookup nodes = new Lookup(() => NodeType, GuidOf, true);
 
         public static UnityEngine.Object Item(string guid) { return items.Find(guid); }
@@ -38,9 +38,9 @@ namespace RandomHowl
         public static UnityEngine.Object Realm(string guid) { return cardTypes.Find(guid); }
         public static UnityEngine.Object Area(string name) { return areas.Find(name); }
 
-        public static GameObject Enemy(string name)
+        public static GameObject Spirit(string name)
         {
-            var found = enemies.Find(name);
+            var found = spirits.Find(name);
             return found == null ? null : Root(found);
         }
 
@@ -82,13 +82,12 @@ namespace RandomHowl
             cards.Forget();
             cardTypes.Forget();
             areas.Forget();
-            enemies.Forget();
+            spirits.Forget();
             nodes.Forget();
         }
 
-        /// A name-to-object index over whatever is loaded, rebuilt when a
-        /// lookup misses — a scene that just loaded may have brought the
-        /// answer with it.
+        /// A name-to-object index over loaded objects, rebuilt on a miss, since
+        /// a newly loaded scene may have the answer.
         class Lookup
         {
             readonly Func<Type> type;
@@ -109,9 +108,9 @@ namespace RandomHowl
 
             public IEnumerable<UnityEngine.Object> All()
             {
-                // Empty counts as a miss: asked during boot, before the
-                // managers had loaded anything, an index built once and kept
-                // would stay empty for the rest of the run.
+                // An empty index counts as a miss. One built during boot,
+                // before managers loaded anything, would otherwise stay empty
+                // all run.
                 if (index == null || (index.Count == 0 && builtOnFrame != Time.frameCount))
                     Build();
                 return index.Values;
@@ -187,9 +186,9 @@ namespace RandomHowl
             return path.ToString();
         }
 
-        /// The skill tree's nodes aren't in a scene, and their asset names
-        /// repeat. Which realm a node sits in and what it hands over together
-        /// name it, and both are readable off the node when it is unlocked.
+        /// Skill tree nodes aren't in a scene and their asset names repeat, so
+        /// a node is named by its realm plus what it gives. Both can be read
+        /// off the node when it's unlocked.
         public const string NodeScene = "skill tree";
 
         public static string NodeKey(UnityEngine.Object node)
@@ -227,8 +226,8 @@ namespace RandomHowl
             return field == null ? null : field.GetValue(instance);
         }
 
-        /// A read-only property instead of a field, for the few the game
-        /// works out rather than stores.
+        /// A read-only property, for the few values the game computes instead
+        /// of storing.
         public static object Property(object instance, string name)
         {
             var getter = AccessTools.PropertyGetter(instance.GetType(), name);

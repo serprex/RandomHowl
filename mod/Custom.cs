@@ -9,14 +9,12 @@ using UnityEngine;
 
 namespace RandomHowl
 {
-    /// More choices on the game's own custom mode screen, and the card cost
-    /// rules behind them. These work in any custom mode game, randomized or not.
+    /// Extra choices on the game's custom mode screen, and the card cost rules
+    /// behind them. They work in any custom mode game, randomized or not.
     ///
-    /// The game's "these cards cost 1 more" row picks one kind of card. Here it
-    /// becomes a toggle per kind, so several can be on at once. Its "realm
-    /// cards cost 1 more" row gets an ALL REALMS choice, which is both of the
-    /// game's realm choices together. And ENERGY moves here from the
-    /// randomizer screen, next to Ro's health.
+    /// "These cards cost 1 more" becomes one toggle per kind of card. "Realm
+    /// cards cost 1 more" gets an ALL REALMS choice. ENERGY sits next to Ro's
+    /// health.
     public static class Custom
     {
         static ManualLogSource log;
@@ -44,14 +42,14 @@ namespace RandomHowl
             "RARE CARDS", "ALL CARDS", "RANDOM CARDS",
         };
 
-        // The game saves one kind as its number. With this bit set, the number
-        // is a set of kinds instead, one bit for each.
+        // The game saves one kind as a number. With this bit set, the number is
+        // a set of kinds instead, one bit each.
         const int Several = 1 << 16;
 
         static readonly int[] EnergyValues = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
-        // The game's own custom mode choices, as the screen was last left.
-        // The field on the game's settings, then the config entry for it.
+        // Custom mode choices as the screen was last left: game settings field,
+        // then its config entry.
         static readonly Dictionary<string, ConfigEntryBase> remembered =
             new Dictionary<string, ConfigEntryBase>();
 
@@ -174,8 +172,8 @@ namespace RandomHowl
             return false;
         }
 
-        /// Set the game's setting to each choice in turn and call its own check.
-        /// The setting is put back after.
+        /// Try each choice in turn with the game's own check, then put the
+        /// setting back.
         static bool AnyRule(object card, object settings, string field, MethodBase check,
                             IEnumerable<int> choices)
         {
@@ -198,8 +196,9 @@ namespace RandomHowl
             }
         }
 
-        /// The game only picks its random cards when random cards is the one
-        /// kind chosen. If it is one of several, show it just that for the call.
+        /// The game only picks random cards when random cards is the only kind
+        /// chosen. If it's one of several, show the game just that kind for
+        /// this call.
         public static void Unlocking(object __instance)
         {
             var settings = Fields.Get(__instance, "customModeSettings");
@@ -221,9 +220,9 @@ namespace RandomHowl
 
         // --- the screen ------------------------------------------------------
 
-        /// Runs before the screen fills in its rows, so ours are there to fill.
-        /// The title menu and the pause menu each have their own copy of the
-        /// screen, and each gets our rows the first time it opens.
+        /// Runs before the screen fills in its rows, so ours get filled too.
+        /// The title and pause menus each have their own copy of the screen,
+        /// and each gets our rows the first time it opens.
         public static void MenuOpening(Component __instance, object setting, bool interactable)
         {
             // The title menu starts from what was picked last time. The pause
@@ -329,8 +328,8 @@ namespace RandomHowl
                        ?.Invoke(row, new[] { value });
         }
 
-        /// The game saves the hidden row's one kind. Save our toggles over it,
-        /// then remember all the choices for the next new game.
+        /// The game saves the hidden row's single kind. Save our toggles over
+        /// it, then remember every choice for the next new game.
         public static void MenuConfirmed(Component __instance)
         {
             var title = AccessTools.TypeByName("TitleMenu");

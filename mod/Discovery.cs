@@ -9,14 +9,11 @@ using BepInEx.Logging;
 
 namespace RandomHowl
 {
-    /// Full world scan, run at startup before any shuffling.
+    /// Scans the world at startup, before any shuffling.
     ///
-    /// Loads every level scene additively, pulls out every shufflable slot
-    /// and its vanilla value, then unloads. Yields a frame between levels so
-    /// the splash screen stays responsive.
-    ///
-    /// This replaces the python tool that used to dump world.tsv — the mod now
-    /// maps the world itself, so a fresh install with no TSV works out of the box.
+    /// Loads each level scene additively, records every shufflable slot and its
+    /// vanilla value, then unloads it. Waits a frame between levels so the
+    /// splash screen stays responsive.
     public static class Discovery
     {
         static ManualLogSource log;
@@ -35,14 +32,14 @@ namespace RandomHowl
             {
                 if (!SkipScenes.Contains(SceneNameAt(i)))
                     yield return LoadAndScan(i, world);
-                yield return null;   // let the splash screen breathe
+                yield return null;   // keep the splash screen responsive
             }
 
             log.LogInfo(string.Format(
                         "discovery: {0} pickups, {1} totems, {2} cave mouths, {3} arena slots "
-                        + "over {4} enemies in {5:0.0}s",
+                        + "over {4} spirits in {5:0.0}s",
                         world.Ingredients.Count, world.Totems.Count, world.Entrances.Count,
-                        world.Enemies.Count, world.Rarity.Count, clock.ElapsedMilliseconds / 1000f));
+                        world.Spirits.Count, world.Rarity.Count, clock.ElapsedMilliseconds / 1000f));
 
             try { ReadSpawns(world); }
             catch (Exception e) { log.LogWarning("could not read the spawn points: " + e.Message); }
@@ -52,9 +49,9 @@ namespace RandomHowl
 
         // --- values -------------------------------------------------------
 
-        /// Cards and the spoiler log's names come off the game's own data
-        /// manager, which only holds them once it has started — later than the
-        /// scan. Plugin calls this when that happens.
+        /// Cards and spoiler log names come from the game's data manager, which
+        /// only has them once it starts, after the scan. Plugin calls this
+        /// then.
         public static void CollectValues(World world, object manager)
         {
             // Drop any index built during boot, when little was loaded yet.
@@ -75,9 +72,9 @@ namespace RandomHowl
             CollectNodes(world);
         }
 
-        /// The skill tree hands over a card or a totem the way an event does,
-        /// so its nodes join those pools. Which node is which is spelled out
-        /// by Keys.Node, since four nodes are simply called "Card".
+        /// Skill tree nodes hand over a card or totem like an event does, so
+        /// they join those pools. Keys.Node names each node, since four of them
+        /// are just called "Card".
         static void CollectNodes(World world)
         {
             world.Nodes.Clear();
@@ -109,8 +106,7 @@ namespace RandomHowl
                     + totems + " a totem");
         }
 
-        /// The manager's own list, or whatever Unity happens to have loaded if
-        /// it hasn't got one.
+        /// The manager's own list, or whatever Unity has loaded if it has none.
         static List<UnityEngine.Object> ListOf(object manager, string field,
                 IEnumerable<UnityEngine.Object> spare)
         {
@@ -128,9 +124,8 @@ namespace RandomHowl
             return found;
         }
 
-        /// Each card carries the realm it belongs to on the asset itself.
-        /// Only the realms are shuffled — the basic, curse and key-item piles
-        /// are left where they are.
+        /// Each card asset stores its realm. Only realms are shuffled; the
+        /// basic, curse and key item piles stay put.
         static void CollectCards(World world, List<UnityEngine.Object> cards,
                 List<UnityEngine.Object> types)
         {
@@ -180,10 +175,9 @@ namespace RandomHowl
                     + " recipe slots");
         }
 
-        /// What a card is crafted from — one slot per ingredient the recipe
-        /// asks for. Only the cards you can craft have one, which is why this
-        /// sits inside the realm walk: an enemy's cards carry a recipe too and
-        /// nobody ever crafts them.
+        /// What a card is crafted from, one slot per ingredient. Only called
+        /// for realm cards, since spirits' cards carry recipes too and nobody
+        /// crafts them.
         static void CollectRecipe(World world, UnityEngine.Object card, string guid)
         {
             var recipe = Fields.Get(card, "recipe") as IList;
@@ -202,8 +196,8 @@ namespace RandomHowl
             }
         }
 
-        /// The same, for a card outside the realms: every line in order,
-        /// without the recipe slots.
+        /// Same, for a card outside the realms: every line in order, not as
+        /// slots.
         static Ingredient[] Recipe(UnityEngine.Object card)
         {
             var found = new List<Ingredient>();
@@ -219,11 +213,10 @@ namespace RandomHowl
             return found.ToArray();
         }
 
-        /// How many of a card can be crafted when the limit goes by rarity,
-        /// which is the game's default. Custom mode can set 1, 2 or 3 for every
-        /// card instead; that isn't taken into account. Cards the skill tree or
-        /// an event hands over get a number too: the gift shuffle can make one
-        /// craftable.
+        /// How many copies of a card can be crafted under the game's default
+        /// limit, which goes by rarity. Custom mode's fixed 1, 2 or 3 is
+        /// ignored. Reward cards get a number too, since the gift shuffle can
+        /// make one craftable.
         static int Copies(World world, UnityEngine.Object card, string guid)
         {
             if (world.PlusOnly.Contains(guid)) return 0;
@@ -244,9 +237,9 @@ namespace RandomHowl
                    && !Flag(type, "isKeyItemType") && !Flag(type, "isSpecialTileRewardType");
         }
 
-        /// The pile outside every realm that the player still draws from —
-        /// index 0 and basic, which is one type and not the OVERWHELMED or
-        /// special-tile piles that share the flag.
+        /// The pile outside every realm that the player still draws from: index
+        /// 0, basic. Not the OVERWHELMED or special tile piles, which share the
+        /// flag.
         static bool IsRealmless(UnityEngine.Object type)
         {
             return (Fields.Get(type, "index") as int?) == 0
@@ -261,10 +254,9 @@ namespace RandomHowl
 
         // --- level discovery ----------------------------------------------
 
-        // Boot and global scenes. Their MonoBehaviours run on load and some use
-        // DontDestroyOnLoad, so loading one to scan it would leak duplicate
-        // managers into the running game. They hold no shufflable slots, so
-        // skip them.
+        // Boot and global scenes. Loading one would run its managers again, and
+        // some use DontDestroyOnLoad, leaking duplicates into the game. They
+        // hold no slots, so skip them.
         static readonly HashSet<string> SkipScenes = new HashSet<string>
         {
             "CompanyLogos", "TitleMenu", "Credits", "Main (Managers)",
@@ -281,11 +273,10 @@ namespace RandomHowl
             return dot > 0 ? path.Substring(0, dot) : path;
         }
 
-        /// Additively load one build scene, find every slot in it, then unload.
-        /// Loaded by build index, not name — the scene names in the build
-        /// settings (TitleMenu, Main (Managers), ...) aren't the levelN files
-        /// on disk, and only LoadScene by index works without guessing.
-        /// Runs as a coroutine so the load doesn't block the splash screen.
+        /// Loads one build scene additively, scans it, then unloads it. Loads
+        /// by build index, since build settings names (TitleMenu, Main
+        /// (Managers), ...) don't match the levelN files on disk. Runs as a
+        /// coroutine so the splash screen doesn't freeze.
         static IEnumerator LoadAndScan(int index, World world)
         {
             var clock = Stopwatch.StartNew();
@@ -294,9 +285,9 @@ namespace RandomHowl
             while (!op.isDone) yield return null;
             var loaded = clock.ElapsedMilliseconds;
 
-            // By build index, never "the last scene in the list". The game
-            // keeps loading scenes of its own while we work, and unloading one
-            // of those would take the title screen down with it.
+            // Look up by build index, not "last scene in the list". The game
+            // loads its own scenes meanwhile, and unloading one of those would
+            // break the title screen.
             var scene = SceneManager.GetSceneByBuildIndex(index);
             if (!scene.IsValid() || !scene.isLoaded)
             {
@@ -326,7 +317,7 @@ namespace RandomHowl
         static int Count(World w)
         {
             return w.Ingredients.Count + w.Totems.Count + w.Entrances.Count
-                   + w.Enemies.Count + w.Grants.Count;
+                   + w.Spirits.Count + w.Grants.Count;
         }
 
         // --- slot scanning -------------------------------------------------
@@ -363,9 +354,8 @@ namespace RandomHowl
             kinds.Add(new Kind { Type = type, Scan = scan });
         }
 
-        /// Ask Unity for the four component types directly. A hand-written walk
-        /// over every GameObject would do the same job, but this hands the
-        /// search to the engine and skips touching the other ~99% of the scene.
+        /// Ask Unity for the four component types directly, instead of walking
+        /// every GameObject.
         static void ScanScene(Scene scene, World world)
         {
             foreach (var root in scene.GetRootGameObjects())
@@ -374,8 +364,8 @@ namespace RandomHowl
                         if (comp != null) kind.Scan(comp, scene.name, world);
         }
 
-        // Each scanner mirrors genmod.py: a UUID key for scene items, a
-        // hierarchy path for events. Both are stable across runs.
+        // Scene items are keyed by UUID, events by hierarchy path. Both stay
+        // the same across runs.
         static void ScanIngredient(Component comp, string scene, World world)
         {
             var data = Fields.Get(comp, "data") as UnityEngine.Object;
@@ -394,9 +384,9 @@ namespace RandomHowl
             world.Totems.Add(Slot.Of(scene, uuid, guid));
         }
 
-        /// Which card an event hands over. Most of them give a quest card the
-        /// game's own logic looks for by name, so only the realm-typed ones
-        /// move — see Plan.BuildGrants.
+        /// Which card an event hands over. Only realm cards move, since most
+        /// events give a quest card the game looks up by name. See
+        /// Plan.BuildGrants.
         static void ScanGrant(Component comp, string scene, World world)
         {
             var data = Fields.Get(comp, "data") as UnityEngine.Object;
@@ -422,9 +412,9 @@ namespace RandomHowl
             });
         }
 
-        /// The game keeps a list of spawn points per region, with the scene
-        /// each is in and where it stands. A cave mouth only names a spawn
-        /// point, so this is how we know which scene it leads into.
+        /// The game's spawn point list per region, with each point's scene and
+        /// position. A cave mouth only names a spawn point, so this tells us
+        /// which scene it leads into.
         static void ReadSpawns(World world)
         {
             var type = AccessTools.TypeByName("RegionDataManager");
@@ -469,9 +459,9 @@ namespace RandomHowl
             var prefabs = Fields.Get(comp, "enemyPrefabs") as IList;
             if (prefabs == null) return;
             var type = Number(Fields.Get(comp, "arenaType"));
-            // The arena spawns one enemy per spawn point, up to its difficulty,
-            // going round the prefab list. So a prefab can spawn more than once,
-            // or not at all.
+            // The arena spawns one spirit per spawn point, up to its
+            // difficulty, cycling through the prefab list. So a prefab can
+            // spawn several times, or not at all.
             var points = Fields.Get(comp, "spawnPoints") as IList;
             var spawns = Math.Min(Number(Fields.Get(comp, "baseDifficulty")),
                                   points == null ? 0 : points.Count);
@@ -483,21 +473,21 @@ namespace RandomHowl
                 slot.Index = i;
                 slot.Arena = type;
                 slot.Amount = i < spawns ? (spawns - 1 - i) / prefabs.Count + 1 : 0;
-                world.Enemies.Add(slot);
+                world.Spirits.Add(slot);
                 Rank(prefab, world);
             }
         }
 
-        /// How the game ranks an enemy — common, elite or boss — and what it
-        /// drops. The rank sits on the prefab's own Character, which is what
-        /// tells an Owl from an OwlElite.
+        /// How the game ranks a spirit (common, elder spirit or boss) and what
+        /// it drops. The rank is on the prefab's Character, which is what tells
+        /// an Owl from an OwlElite.
         static void Rank(UnityEngine.Object prefab, World world)
         {
             if (world.Rarity.ContainsKey(prefab.name)) return;
             var go = prefab as GameObject;
             if (go == null) return;
-            var enemy = Registry.EnemyType == null ? null : go.GetComponent(Registry.EnemyType);
-            var drops = enemy == null ? null : Fields.Get(enemy, "lootDrops") as IList;
+            var spirit = Registry.EnemyType == null ? null : go.GetComponent(Registry.EnemyType);
+            var drops = spirit == null ? null : Fields.Get(spirit, "lootDrops") as IList;
             if (drops != null)
             {
                 var loot = new List<string>();

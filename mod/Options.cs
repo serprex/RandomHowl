@@ -10,12 +10,11 @@ using UnityEngine.UI;
 
 namespace RandomHowl
 {
-    /// The randomizer screen, built out of parts of the title menu.
+    /// The randomizer screen, built from copies of title menu parts.
     ///
-    /// A RANDOMIZER entry is copied from SETTINGS, and the screen behind it is
-    /// a copy of the custom mode screen with our own rows in it. Copying means
-    /// the art, the font, the sounds and the controller navigation all come
-    /// for free, and there is no hand-drawn UI to go stale.
+    /// The RANDOMIZER entry is copied from SETTINGS, and its screen is a copy
+    /// of the custom mode screen with our rows in it. Copying gets the art,
+    /// font, sounds and controller navigation for free.
     public static class Options
     {
         static ManualLogSource log;
@@ -35,15 +34,15 @@ namespace RandomHowl
         static readonly string[] CaveLabels = { "OFF", "ON", "DECOUPLED" };
         static readonly int[] CaveValues = { 0, 1, 2 };
 
-        static readonly string[] EnemyLabels = { "OFF", "ON", "RESTRICTED" };
-        static readonly int[] EnemyValues = { 0, 1, 2 };
+        static readonly string[] SpiritLabels = { "OFF", "ON", "RESTRICTED" };
+        static readonly int[] SpiritValues = { 0, 1, 2 };
 
         static readonly string[] GrantLabels = { "OFF", "ON", "EVERYTHING" };
         static readonly int[] GrantValues = { 0, 1, 2 };
 
         // Only the first entry is named; the rest draw as their own number.
-        static readonly string[] ElitePercentLabels = { "VANILLA" };
-        static readonly int[] ElitePercentValues =
+        static readonly string[] ElderPercentLabels = { "VANILLA" };
+        static readonly int[] ElderPercentValues =
             { -1, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 
         public static void Install(Harmony harmony, ManualLogSource logger)
@@ -58,9 +57,9 @@ namespace RandomHowl
                 harmony.Patch(start, null, new HarmonyMethod(
                     typeof(Options).GetMethod(nameof(TitleShown))));
 
-            // Every run funnels through DoLoadFlow. The world scan is still
-            // running behind the title screen, and a run started before it
-            // lands loads its first scenes unpatched, so hold the flow here.
+            // Every run goes through DoLoadFlow. A run started before the world
+            // scan finishes would load its first scenes unpatched, so hold it
+            // here.
             doLoadFlow = type == null ? null : AccessTools.Method(type, "DoLoadFlow");
             if (doLoadFlow == null)
             {
@@ -72,9 +71,9 @@ namespace RandomHowl
                 typeof(Options).GetMethod(nameof(HoldLoadFlow))));
         }
 
-        /// DoLoadFlow is a coroutine, so a prefix can't simply block — spinning
-        /// on the thread would stall the scan that has to finish first. Hand
-        /// back an enumerator that idles until Ready, then runs the game's own.
+        /// DoLoadFlow is a coroutine, so the prefix can't just block, which
+        /// would stall the scan too. Return an enumerator that waits for Ready,
+        /// then runs the game's own.
         public static bool HoldLoadFlow(object __instance, ref IEnumerator __result)
         {
             if (Plugin.Instance.Ready)
@@ -95,7 +94,8 @@ namespace RandomHowl
             yield return doLoadFlow.Invoke(title, null);
         }
 
-        /// Runs every time the title screen loads, so the old copy is gone.
+        /// Runs each time the title screen loads, since the old copy is gone by
+        /// then.
         public static void TitleShown(object __instance)
         {
             if (screen != null) return;
@@ -128,7 +128,7 @@ namespace RandomHowl
         // --- the custom mode screen -----------------------------------------
 
         /// Only custom mode games are randomized, so the custom mode screen
-        /// gets a RANDOMIZER row at the top to pick rando or not.
+        /// gets a RANDOMIZER row at the top.
         static void AddCustomRow(Component menu)
         {
             var panel = Fields.Get(menu, "optionaPanel") as CanvasGroup;
@@ -150,8 +150,8 @@ namespace RandomHowl
             TwoColumns(panel.transform, rowSize);
         }
 
-        /// The game keeps custom mode locked until rebirth mode is beaten.
-        /// That is the only way to a randomized game, so open it.
+        /// Custom mode is locked until rebirth mode is beaten. It's the only
+        /// way into a randomized game, so unlock it.
         static void UnlockCustomMode()
         {
             var type = AccessTools.TypeByName("PersistantDataManager");
@@ -175,8 +175,8 @@ namespace RandomHowl
             var label = entry.GetComponent<Text>();
             if (label != null) label.text = "RANDOMIZER";
 
-            // Only the click changes. The hover trigger still points at the
-            // real title menu, which is where the sound comes from.
+            // Only the click changes. Hover still points at the real title
+            // menu, which plays the sound.
             var button = entry.GetComponent<Button>();
             if (button != null)
             {
@@ -208,8 +208,8 @@ namespace RandomHowl
             var heading = Fields.Get(menu, "title") as Text;
             var done = Fields.Get(menu, "doneButton") as Component;
             var template = Fields.Get(menu, "rebirthCardSet") as Component;
-            // Straight away, not at the end of the frame: its Start would take
-            // the done button back off us.
+            // Right away, not at end of frame, or its Start takes the done
+            // button back.
             UnityEngine.Object.DestroyImmediate(menu);
 
             if (panel == null || done == null || template == null)
@@ -238,10 +238,9 @@ namespace RandomHowl
                     UnityEngine.Object.DestroyImmediate(child);
             }
 
-            // Copies first, while the template is still untouched, then the
-            // template itself becomes the seed row at the top. The order here
-            // is the order down the two columns: what gets shuffled on the
-            // left, enemies and the extras on the right.
+            // Copy rows while the template is untouched, then turn the template
+            // into the seed row at the top. Rows fill two columns in this
+            // order: shuffles on the left, spirits and extras on the right.
             var plugin = Plugin.Instance;
             for (var i = 0; i < Shuffles.Length; i += 2)
                 AddToggle(list, template, Shuffles[i + 1], plugin.Shuffles[Shuffles[i]]);
@@ -253,12 +252,12 @@ namespace RandomHowl
             AddChoice(list, template, "CARD GIFTS", GrantLabels, GrantValues, false,
                       (int)plugin.GrantMode.Value,
                       value => plugin.GrantMode.Value = (GrantShuffle)value);
-            AddChoice(list, template, "ENEMIES", EnemyLabels, EnemyValues, false,
-                      (int)plugin.EnemyMode.Value,
-                      value => plugin.EnemyMode.Value = (EnemyShuffle)value);
-            AddChoice(list, template, "ELITE%", ElitePercentLabels,
-                      ElitePercentValues, true, plugin.ElitePercent.Value,
-                      value => plugin.ElitePercent.Value = value);
+            AddChoice(list, template, "SPIRITS", SpiritLabels, SpiritValues, false,
+                      (int)plugin.SpiritMode.Value,
+                      value => plugin.SpiritMode.Value = (SpiritShuffle)value);
+            AddChoice(list, template, "ELDER%", ElderPercentLabels,
+                      ElderPercentValues, true, plugin.ElderPercent.Value,
+                      value => plugin.ElderPercent.Value = value);
             AddToggle(list, template, "SCARCE HOWLS", plugin.Scarce);
             AddToggle(list, template, "CARDS UNLOCKED", plugin.RevealCards);
             AddToggle(list, template, "SKIP LOGOS", plugin.SkipLogos);
@@ -284,7 +283,7 @@ namespace RandomHowl
             return true;
         }
 
-        /// Game fits nine rows in one column
+        /// The game's one column only fits nine rows.
         internal static void TwoColumns(Transform list, Vector2 rowSize)
         {
             if (rowSize.x <= 0f || rowSize.y <= 0f) return;
@@ -315,10 +314,9 @@ namespace RandomHowl
             return go;
         }
 
-        /// A row that clicks through a list of values instead of on and off.
-        /// The game's own custom mode screen has rows like this — its enemy
-        /// health one is a percentage in eight steps — so the row already
-        /// knows how to draw them, and all we hand it is the list.
+        /// A row that cycles through a list of values instead of on/off. The
+        /// custom mode screen already has rows like this (enemy health in eight
+        /// steps), so we only hand it the list.
         internal static GameObject AddChoice(Transform list, Component template, string label,
                                              string[] labels, int[] values, bool percent,
                                              int current, Action<int> chosen)
@@ -339,9 +337,8 @@ namespace RandomHowl
             return go;
         }
 
-        /// Replace the row's on/off pair with our own choices. An entry with no
-        /// text of its own draws as the number it carries, so only the labelled
-        /// ones need a TextData made for them.
+        /// Replace the row's on/off pair with our choices. An entry without its
+        /// own text draws its number, so only labelled entries need a TextData.
         static bool SetChoices(Component row, string[] labels, int[] values, bool percent)
         {
             var field = Fields.Of(row, "valueTexts");
@@ -391,8 +388,8 @@ namespace RandomHowl
             Fields.Set(choice, "text", text);
         }
 
-        /// Which entry a config value shows as. Someone may have typed a number
-        /// into the config file that isn't one of ours, so take the closest.
+        /// Which entry a config value shows as. The config file may hold a
+        /// number that isn't one of ours, so take the closest.
         internal static int Nearest(int[] values, int current)
         {
             var best = 0;
@@ -401,9 +398,9 @@ namespace RandomHowl
             return best;
         }
 
-        /// The seed is text, not a yes/no, so this row loses the selector and
-        /// gets a text field over the same label. Leave it empty and the next
-        /// edit rolls a random one.
+        /// The seed is text, so this row swaps its selector for a text field
+        /// over the same label. Leaving it empty rolls a random seed on the
+        /// next edit.
         static void MakeSeedRow(Component row)
         {
             var go = row.gameObject;
@@ -440,10 +437,10 @@ namespace RandomHowl
 
         // --- odds and ends ---------------------------------------------------
 
-        /// The title menu drops the UI selection every frame while none of the
-        /// screens it knows about are up, so add ours to that list. Without
-        /// this the seed field is unselected the frame after you click it and
-        /// only one key press gets through.
+        /// The title menu clears the UI selection every frame unless one of its
+        /// known screens is up, so add ours to that list. Otherwise the seed
+        /// field loses focus right after a click and only one key press gets
+        /// through.
         static void KeepSelection(Component title)
         {
             var screens = Fields.Get(title, "allScreensThatCanBlock") as IList;
@@ -457,9 +454,8 @@ namespace RandomHowl
             screens.Add(screen);
         }
 
-        /// Save only. The screen is on the title menu, and starting a run
-        /// shuffles from the save's settings anyway, so shuffling here on
-        /// every change would just stutter the menu.
+        /// Save only. A run shuffles from its save's settings when it starts,
+        /// so shuffling on every change here would just stutter the menu.
         internal static void Apply()
         {
             var plugin = Plugin.Instance;
@@ -484,9 +480,9 @@ namespace RandomHowl
                     UnityEngine.Object.DestroyImmediate(comp);
         }
 
-        /// OptionsSelector.Setup comes in an int and a bool flavour, and takes
-        /// whatever delegate type the game declared. Find the right one and
-        /// hand it a method off our own component.
+        /// OptionsSelector.Setup has int and bool versions and takes whatever
+        /// delegate type the game declared. Find the right one and pass it a
+        /// method on our component.
         static void Wire(Component row, Type valueType, object value,
                          Component target, string method)
         {
@@ -527,8 +523,8 @@ namespace RandomHowl
         }
     }
 
-    /// One row with a list of values on it. The game's selector hands back the
-    /// entry that was clicked to; which value that is, is ours to know.
+    /// One row with a list of values. The game's selector passes back the
+    /// clicked entry, and we know which value that is.
     public class ValueRow : MonoBehaviour
     {
         public int[] Values;
@@ -543,8 +539,8 @@ namespace RandomHowl
         }
     }
 
-    /// The randomizer screen itself. Everything is already saved by the time
-    /// you get here, so closing is all there is to do.
+    /// The randomizer screen. Changes save as they're made, so closing is all
+    /// that's left.
     public class RandomizerScreen : MonoBehaviour
     {
         public void Done(int index) { Close(); }
