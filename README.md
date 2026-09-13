@@ -90,6 +90,9 @@ randomized or not:
   and cards from the realm you're in cost 1 more. Basic, quest, spirit and
   curse cards are left out, as the game's own realm choices do.
 
+The custom mode screen remembers what you picked, so the next new custom game
+starts from the same choices.
+
 In a randomized game, every menu tab and fast travel are open from the start,
 and the tutorial's "press ..." tips don't show. When a tutorial event waits
 for you to press a key, the mod presses it for you.
@@ -129,6 +132,22 @@ below are off, and the tutorial runs as normal. Only the extras still apply.
 | `skip_intro` | true / false | Skip the opening cutscene |
 | `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
 | `spoiler_log` | true / false | Write a spoiler log |
+
+The `[custom]` section holds the rest of the custom mode screen, as you last
+left it. These are the game's own settings, so they are saved into a custom
+mode save by the game itself, randomized or not.
+
+| Setting | Values | What it does |
+| --- | --- | --- |
+| `rebirth_cards` | true / false | Use rebirth mode's cards |
+| `rebirth_enemies` | true / false | Use rebirth mode's enemies |
+| `enemy_health_percent` | number | Enemy health, as a percent of normal |
+| `player_health` | number | Ro's health |
+| `high_deck_minimum` | true / false | Decks need at least 20 cards instead of 15 |
+| `crafting_limit` | number | Copies of each card that can be crafted. `-1` is the normal limit |
+| `realm_cost` | `0` to `3` | Which realm cards cost 1 more: `0` foreign, `1` the realm you're in, `2` none, `3` all realms |
+| `kind_cost` | number | Which kinds of card cost 1 more. Easier to set on the screen |
+| `return_to_grove` | true / false | Go back to the grove when Ro dies |
 
 ## Uninstall
 

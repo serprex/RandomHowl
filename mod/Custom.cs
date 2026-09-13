@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
@@ -49,9 +50,36 @@ namespace RandomHowl
 
         static readonly int[] EnergyValues = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
+        // The game's own custom mode choices, as the screen was last left.
+        // The field on the game's settings, then the config entry for it.
+        static readonly Dictionary<string, ConfigEntryBase> remembered =
+            new Dictionary<string, ConfigEntryBase>();
+
         public static void Install(Harmony harmony, ManualLogSource logger)
         {
             log = logger;
+            var config = Plugin.Instance.Config;
+            Remember(config, "alternateCardSet", "rebirth_cards", false,
+                     "use rebirth mode's cards");
+            Remember(config, "advancedEnemies", "rebirth_enemies", false,
+                     "use rebirth mode's enemies");
+            Remember(config, "customEnemyHeathPercent", "enemy_health_percent", 100,
+                     "enemy health, as a percent of normal");
+            Remember(config, "customPlayerHealth", "player_health", 20, "Ro's health");
+            Remember(config, "highDeckMinLimit", "high_deck_minimum", false,
+                     "decks need at least 20 cards instead of 15");
+            Remember(config, "customCraftingLimit", "crafting_limit", -1,
+                     "how many copies of each card can be crafted. -1 is the normal limit");
+            Remember(config, "realmManaPenaltyIndex", "realm_cost", 0,
+                     "which realm cards cost 1 more. 0 foreign cards, 1 cards from the "
+                     + "realm you're in, 2 none, 3 all realms");
+            Remember(config, "typeManaPenaltyIndex", "kind_cost", 0,
+                     "which kinds of card cost 1 more. 0 none, 1 curses, 2 spirit, 3 quest, "
+                     + "4 common, 5 rare, 6 all, 7 random. Several kinds at once are "
+                     + "65536 plus 2 to the power of each kind; easier to set on the screen");
+            Remember(config, "returnToGroveOnDeath", "return_to_grove", false,
+                     "go back to the grove when Ro dies");
+
             typePenalty = Patch(harmony, "CardData", "HasTypeManaPenalty", nameof(KindCost));
             realmPenalty = Patch(harmony, "CardData", "HasRealmManaPenalty", nameof(RealmCost));
             Patch(harmony, "LiveGameDataManager", "UnlockCardBluePrint", nameof(Unlocking),
@@ -88,6 +116,12 @@ namespace RandomHowl
         static HarmonyMethod Ours(string name)
         {
             return name == null ? null : new HarmonyMethod(typeof(Custom).GetMethod(name));
+        }
+
+        static void Remember<T>(ConfigFile config, string field, string key, T value,
+                                string description)
+        {
+            remembered[field] = config.Bind("custom", key, value, description);
         }
 
         // --- card costs ------------------------------------------------------
@@ -190,8 +224,11 @@ namespace RandomHowl
         /// Runs before the screen fills in its rows, so ours are there to fill.
         /// The title menu and the pause menu each have their own copy of the
         /// screen, and each gets our rows the first time it opens.
-        public static void MenuOpening(Component __instance)
+        public static void MenuOpening(Component __instance, object setting, bool interactable)
         {
+            // The title menu starts from what was picked last time. The pause
+            // menu shows the game being played, so leave that alone.
+            if (interactable && setting != null) Load(setting);
             if (__instance.GetComponent<CustomRows>() != null) return;
             var rows = __instance.gameObject.AddComponent<CustomRows>();
             try { AddRows(__instance, rows); }
@@ -292,20 +329,48 @@ namespace RandomHowl
                        ?.Invoke(row, new[] { value });
         }
 
-        /// The game saves the hidden row's one kind. Save our toggles over it.
+        /// The game saves the hidden row's one kind. Save our toggles over it,
+        /// then remember all the choices for the next new game.
         public static void MenuConfirmed(Component __instance)
         {
-            var rows = __instance.GetComponent<CustomRows>();
-            if (rows == null || rows.Toggles.Count == 0) return;
             var title = AccessTools.TypeByName("TitleMenu");
             var settings = title == null ? null
                 : AccessTools.Field(title, "lastSelcetedModeSettings")?.GetValue(null);
             if (settings == null) return;
-            var kinds = 0;
-            for (var i = 0; i < rows.Toggles.Count; i++)
-                if ((Fields.Get(rows.Toggles[i], "valueIndex") as int? ?? 0) != 0)
-                    kinds |= 1 << rows.Kinds[i];
-            Fields.Set(settings, "typeManaPenaltyIndex", Index(kinds));
+            var rows = __instance.GetComponent<CustomRows>();
+            if (rows != null && rows.Toggles.Count != 0)
+            {
+                var kinds = 0;
+                for (var i = 0; i < rows.Toggles.Count; i++)
+                    if ((Fields.Get(rows.Toggles[i], "valueIndex") as int? ?? 0) != 0)
+                        kinds |= 1 << rows.Kinds[i];
+                Fields.Set(settings, "typeManaPenaltyIndex", Index(kinds));
+            }
+            try { Save(settings); }
+            catch (Exception e) { log.LogError("could not save custom mode choices: " + e); }
+        }
+
+        /// Copy the remembered choices onto the game's settings.
+        static void Load(object settings)
+        {
+            try
+            {
+                foreach (var pair in remembered)
+                    Fields.Set(settings, pair.Key, pair.Value.BoxedValue);
+            }
+            catch (Exception e) { log.LogError("could not load custom mode choices: " + e); }
+        }
+
+        /// Copy the game's settings into the config. Only changed values are
+        /// set, since each set writes the file.
+        static void Save(object settings)
+        {
+            foreach (var pair in remembered)
+            {
+                var value = Fields.Get(settings, pair.Key);
+                if (value != null && !value.Equals(pair.Value.BoxedValue))
+                    pair.Value.BoxedValue = value;
+            }
         }
     }
 
