@@ -67,6 +67,11 @@ namespace RandomHowl
                  nameof(TearHowlCost), getter: true);
             Hook(harmony, "CombatArena", "InstantiateEnemy", nameof(EnemySpawned), true);
 
+            // Two pickups in different scenes share a UUID, so taking one hid
+            // both. Give each its own id before the scan or save reads it.
+            Hook(harmony, "UUIDAuto", "ID", nameof(IdRead), true, getter: true);
+            Hook(harmony, "UUIDManual", "ID", nameof(IdRead), true, getter: true);
+
             // The tutorial hides menu tabs and fast travel for a while.
             // Shuffled caves can lead out of the first forest before then with
             // no way back, so open everything from the start.
@@ -151,6 +156,15 @@ namespace RandomHowl
         }
 
         // --- the patches ---------------------------------------------------
+
+        /// The game data reuses one pickup UUID in two scenes. Dark Forest Cave
+        /// A1 keeps it; Meadow Bush Cave A1's copy becomes UUID:scene.
+        public static void IdRead(object __instance, ref string __result)
+        {
+            if (__result == "2ab366b1-2888-4d4d-b28b-acff7d31f974"
+                && ((Component)__instance).gameObject.scene.name == "MeadowBushCaveA1")
+                __result += ":MeadowBushCaveA1";
+        }
 
         public static void ItemAppeared(object __instance)
         {
