@@ -35,6 +35,8 @@ namespace RandomHowl
         public ConfigEntry<int> PlayerEnergy;
         public ConfigEntry<bool> Scarce;
         public ConfigEntry<bool> RevealCards;
+        public ConfigEntry<bool> TearHealth;
+        public ConfigEntry<bool> OpenWorld;
         public ConfigEntry<bool> SkipLogos;
         public ConfigEntry<bool> SkipIntro;
         public ConfigEntry<bool> AutoText;
@@ -121,6 +123,11 @@ namespace RandomHowl
             RevealCards = Config.Bind("rules", "all_cards_revealed", false,
                 "every craftable card is in the book from the start, instead of "
                 + "four at a time as the ingredient juice fills up");
+            TearHealth = Config.Bind("rules", "tear_health", false,
+                "enemies get 1% more health for each blood tear placed on the "
+                + "skill tree, up to 75% more.");
+            OpenWorld = Config.Bind("rules", "open_world", false,
+                "paths from forest are open from the start");
 
             SkipLogos = Config.Bind("extras", "skip_logos", true,
                 "jump straight past the publisher logos to the title screen");
@@ -141,6 +148,8 @@ namespace RandomHowl
                 { ElderPercent, -1 },
                 { Scarce, false },
                 { RevealCards, false },
+                { TearHealth, false },
+                { OpenWorld, false },
             };
             foreach (var entry in Shuffles.Values) vanilla[entry] = false;
 
@@ -285,6 +294,8 @@ namespace RandomHowl
                         Rule(ElderPercent);
                         Rule(Scarce);
                         Rule(RevealCards);
+                        Rule(TearHealth);
+                        Rule(OpenWorld);
                     }
                     file.Save();
                     Logger.LogInfo((randomized.Value ? "randomized" : "not randomized")

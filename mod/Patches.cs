@@ -65,6 +65,7 @@ namespace RandomHowl
                  getter: true);
             Hook(harmony, "ProgressionDataManager", "NextSkillOrbSoulAmount",
                  nameof(TearHowlCost), getter: true);
+            Hook(harmony, "CombatArena", "InstantiateEnemy", nameof(EnemySpawned), true);
 
             // The tutorial hides menu tabs and fast travel for a while.
             // Shuffled caves can lead out of the first forest before then with
@@ -555,6 +556,66 @@ namespace RandomHowl
             return !keepingHowls;
         }
 
+        // --- difficulty ------------------------------------------------------
+
+        const int MaxTearHealth = 75;
+
+        /// The flag the moose at the waterfalls sets when his roar opens the
+        /// paths out of the first forest.
+        const int MooseExplainsGreatSpirits = 2;
+
+        /// Enemy health grows 1% for each blood tear placed on the skill tree.
+        /// Runs after the game applies the custom mode health percent, so the
+        /// two stack. Allies and environmental objects are left alone, as the
+        /// game does for its own percent.
+        public static void EnemySpawned(object __result, bool playerAlly)
+        {
+            if (playerAlly || __result == null || !Plugin.Rule(Plugin.Instance.TearHealth)) return;
+            Guard("tear health", () =>
+            {
+                if (Fields.Property(__result, "IsSpecialTile") as bool? ?? true) return;
+                var extra = TearsPlaced();
+                var stats = Fields.Get(__result, "stats");
+                if (extra <= 0 || stats == null) return;
+                foreach (var field in new[] { "health", "maxHealth" })
+                {
+                    var health = Fields.Get(stats, field) as int?;
+                    if (health == null) continue;
+                    Fields.Set(stats, field,
+                               Mathf.Max(1, Mathf.RoundToInt(health.Value * (100f + extra) / 100f)));
+                }
+            });
+        }
+
+        /// Tears spent on skills, whole or part way. Unspent tears don't count.
+        static int TearsPlaced()
+        {
+            var data = Manager("LiveGameDataManager");
+            var slots = data == null ? null : Fields.Get(data, "skillSlotinfo") as IEnumerable;
+            if (slots == null) return 0;
+            var placed = 0;
+            foreach (var slot in slots)
+                if (slot != null) placed += Fields.Get(slot, "progression") as int? ?? 0;
+            return Math.Min(placed, MaxTearHealth);
+        }
+
+        /// Sets the moose's flag, which the first forest checks every frame to
+        /// clear its blockers and load the paths beyond. Runs on every load, so
+        /// a save made before this was turned on gets it too.
+        public static void OpenPassages()
+        {
+            if (!Plugin.Rule(Plugin.Instance.OpenWorld)) return;
+            var data = Manager("LiveGameDataManager");
+            if (data == null) return;
+            Guard("open world", () =>
+            {
+                var flags = Fields.Get(data, "alterations");
+                var type = AccessTools.TypeByName("PermanentAlteration");
+                if (flags == null || type == null) return;
+                Call(flags, "TryAdd", Enum.ToObject(type, MooseExplainsGreatSpirits));
+            });
+        }
+
         // --- every card in the book ------------------------------------------
 
         /// Runs after the save is read in, for both new and loaded games. It's
@@ -566,6 +627,7 @@ namespace RandomHowl
             lastArena = null;
             RevealAllCards();
             UnlockMenus();
+            OpenPassages();
         }
 
         public static void ProfileDeleted(int profileSaveSlot)

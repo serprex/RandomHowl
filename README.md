@@ -133,6 +133,8 @@ below are off, and the tutorial runs as normal. Only the extras still apply.
 | `player_energy` | `1` to `20` | Ro's energy per turn in a custom mode game, before totems and skills. Same as the ENERGY row on the custom mode screen. Copied into every custom mode save, randomized or not. Vanilla is 5 |
 | `scarce_howls` | true / false | Howls are kept on death and crafting is free, but beaten fights pay no howls or ingredients again. Howls are only spent on skill points. Spirits are placed so there's enough ingredients to craft every card up to its default copy limit |
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
+| `tear_health` | true / false | Enemies get 1% more health for each blood tear placed on the skill tree, up to 75% more |
+| `open_world` | true / false | Paths from forest are open from the start |
 | `skip_logos` | true / false | Skip the publisher logos |
 | `skip_intro` | true / false | Skip the opening cutscene |
 | `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
