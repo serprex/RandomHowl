@@ -101,7 +101,7 @@ save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
 | `elder_percent` | `-1` to `100` | Share of spirits that appear as elder spirits. With `spirits` set to `Restricted`, it only counts spirits in elder spirit fights. `-1` keeps the vanilla amount (about 23%) |
 | `totems` | true / false | Shuffle totem pickups |
 | `ingredients` | true / false | Shuffle ingredient pickups |
-| `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. The way into a Fylge memory and back out never moves |
+| `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. |
 | `card_realms` | true / false | Shuffle which realm each card belongs to |
 | `recipes` | true / false | Shuffle which ingredients each card needs |
 | `player_energy` | `1` to `20` | Ro's energy per turn in a custom mode game, before totems and skills. Same as the ENERGY row on the custom mode screen. Copied into every custom mode save, randomized or not. Vanilla is 5 |

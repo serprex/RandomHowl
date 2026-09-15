@@ -85,8 +85,7 @@ namespace RandomHowl
             EntranceMode = Config.Bind("shuffle", "entrances", EntranceShuffle.On,
                 "where each cave mouth leads. On keeps caves in pairs, so "
                 + "walking back out puts you where you came in. Decoupled sends "
-                + "every cave mouth and exit somewhere random. The way into a "
-                + "Fylge memory and back out never moves");
+                + "every cave mouth and exit somewhere random.");
             SpiritMode = Config.Bind("shuffle", "spirits", SpiritShuffle.On,
                 "On puts any non-boss spirit anywhere. Environmental actors "
                 + "shuffle with each other. Restricted swaps elder spirits only "

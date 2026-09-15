@@ -167,10 +167,11 @@ namespace RandomHowl
         }
 
         /// Story areas, not caves: the Fylge memory, entered after beating a
-        /// Fylge. The way in and out never moves.
+        /// Fylge, and the Black Lake cutscene. The way in and out never moves.
         static readonly HashSet<string> StoryAreas = new HashSet<string>
         {
             "FylgeMemoryAreaData",
+            "BlackLakeAreaData",
         };
 
         /// The cave events that can move: all but the ways into a story area,

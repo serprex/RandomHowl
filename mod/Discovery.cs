@@ -399,11 +399,16 @@ namespace RandomHowl
                         if (comp != null) kind.Scan(comp, scene.name, world);
         }
 
+        static readonly Type IngredientType = AccessTools.TypeByName("IngredientData");
+
         // Scene items are keyed by UUID, events by hierarchy path. Both stay
         // the same across runs.
         static void ScanIngredient(Component comp, string scene, World world)
         {
             var data = Fields.Get(comp, "data") as UnityEngine.Object;
+            // Some pickups hand over a card for an event, like Scale Shield.
+            // Only ingredients move.
+            if (IngredientType != null && !IngredientType.IsInstanceOfType(data)) return;
             var guid = data == null ? null : Registry.GuidOf(data);
             var uuid = Registry.Uuid(comp.gameObject);
             if (uuid == null || guid == null) return;
