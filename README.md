@@ -1,19 +1,12 @@
-A randomizer mod for Death Howl. It shuffles spirits, pickups, cave entrances,
-card realms, recipes and card rewards based on a seed.
-
-It has no logic: nothing checks that a seed can be finished. Entrance and totem
-shuffles in particular can lock you out of progress.
-
-The mod is a single BepInEx plugin. It does its shuffling while the game runs
-and never changes any game files.
+A no logic randomizer mod for Death Howl. Shuffles spirits, pickups, caves,
+card realms, recipes and card rewards.
 
 ## Requirements
 
-- Death Howl (Steam)
-- [BepInEx 5](https://github.com/BepInEx/BepInEx/releases), the **Windows x64**
-  build (use it on Linux too, since the game runs under Proton)
-- The [.NET SDK](https://dotnet.microsoft.com/download) (any recent version),
-  to build the plugin
+- [Death Howl](https://store.steampowered.com/app/2825880/Death_Howl)
+- [BepInEx 5](https://github.com/BepInEx/BepInEx/releases), **Windows x64**
+  build *(use on Linux too, since game runs under Proton)*
+- [.NET SDK](https://dotnet.microsoft.com/download) (any recent version)
 
 ## 1. Install BepInEx
 
@@ -66,57 +59,38 @@ Death Howl/BepInEx/plugins/RandomHowl/
 
 ## Playing
 
-1. Start the game. The first launch maps the game world during the splash
-   screens.
-2. On the title screen, open **RANDOMIZER** (under SETTINGS).
-3. Enter a seed, or leave it empty for a random one, and pick your options.
-   Changes save right away.
-4. Start a **new game** in **custom mode**, with the **RANDOMIZER** row at the
-   top of the custom mode screen on. Normal and rebirth games are never
-   randomized, and neither is a custom game with that row off. The mod unlocks
-   custom mode, so you don't have to beat rebirth mode first. Your settings
-   are copied into that save, so changing them later only affects new games.
+1. On title screen, open **RANDOMIZER**.
+2. Enter seed, or leave it empty for a random one, and pick your options.
+3. Start a **new game** in **custom mode**, with **RANDOMIZER** enabled.
 
-If the spoiler log is on, it is written next to the plugin as
-`spoiler-<seed>.txt`.
+If spoiler log is on, it is written next to plugin as `spoiler-<seed>.txt`.
 
-The mod also changes the custom mode screen, in any custom mode game,
-randomized or not:
+Mod also expands custom mode, randomized or not:
 
-- **ENERGY**, Ro's energy per turn, sits next to Ro's health.
+- **ENERGY**, Ro's energy per turn.
 - "These cards cost 1 more" is split into a toggle for each kind of card, so
   more than one can be on.
 - "Realm cards cost 1 more" has an **ALL REALMS** choice: both foreign cards
   and cards from the realm you're in cost 1 more. Basic, quest, spirit and
   curse cards are left out, as the game's own realm choices do.
 
-The custom mode screen remembers what you picked, so the next new custom game
-starts from the same choices.
-
 In a randomized game, every menu tab and fast travel are open from the start,
-and the tutorial's "press ..." tips don't show. When a tutorial event waits
-for you to press a key, the mod presses it for you.
+and the tutorial's "press ..." tips don't show.
 
-The game's hints on the materials screen name vanilla places, so the mod adds
-its own: a material gets a green rim when it can still be found in the zone Ro
-is in. That means a pickup there she hasn't taken, or a drop from a spirit
-there. With `scarce_howls` on, only fights not yet beaten count.
+Randomizer adds hints to materials screen: a material gets a bright rim when
+it can still be found in current region. That means a pickup there she hasn't
+taken, or a drop from a spirit there. With `scarce_howls` on, only fights with
+uncollected spoiles count.
 
 ## Options
 
 Everything on the in-game screen is also stored in
-`BepInEx/config/randomhowl.cfg`, which you can edit by hand. These are the
-settings new games get.
+`BepInEx/config/randomhowl.cfg`. These are the settings new games get.
 
 When a new game starts, whether it is randomized is saved to
 `profile_<N>.randomhowl.cfg` in the game's `saves_v_1_0` folder, next to that
 save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
-`auto_text` and `spoiler_log` is copied there too. Loading the save uses that
-copy, so edit it to change a game already in progress. A save with no copy
-isn't randomized. Deleting a save in game deletes its copy too.
-
-A game that isn't randomized plays like vanilla: nothing is shuffled, the rules
-below are off, and the tutorial runs as normal. Only the extras still apply.
+`auto_text` and `spoiler_log` is copied there too.
 
 | Setting | Values | What it does |
 | --- | --- | --- |
@@ -140,9 +114,7 @@ below are off, and the tutorial runs as normal. Only the extras still apply.
 | `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
 | `spoiler_log` | true / false | Write a spoiler log |
 
-The `[custom]` section holds the rest of the custom mode screen, as you last
-left it. These are the game's own settings, so they are saved into a custom
-mode save by the game itself, randomized or not.
+The `[custom]` section holds the rest of the custom mode screen.
 
 | Setting | Values | What it does |
 | --- | --- | --- |
@@ -158,4 +130,4 @@ mode save by the game itself, randomized or not.
 
 ## Uninstall
 
-Delete `BepInEx/plugins/RandomHowl/`. No game files were changed.
+Delete `BepInEx/plugins/RandomHowl/`.
