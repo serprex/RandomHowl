@@ -38,13 +38,14 @@ namespace RandomHowl
         On,
         /// Without elder_percent, elder and plain spirits only swap with their
         /// own kind. With it, elder spirits only appear in elder spirit fights,
-        /// and the percent only counts those fights. Bosses never move in any
-        /// mode.
+        /// and the percent only counts those fights.
         Restricted,
     }
 
     public class Rng
     {
+        const ulong Mult = 6364136223846793005UL;
+        const ulong Inc = 1442695040888963407UL;        // PCG's default stream
         ulong state;
 
         public Rng(string seed)
@@ -55,21 +56,31 @@ namespace RandomHowl
                 hash ^= ch;
                 hash *= 1099511628211UL;
             }
-            state = hash;
+            state = 0;
+            Next();
+            state += hash;
+            Next();
         }
 
-        public ulong Next()                              // SplitMix64
+        public uint Next()
         {
-            state += 0x9E3779B97F4A7C15UL;
-            var z = state;
-            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
-            z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
-            return z ^ (z >> 31);
+            var old = state;
+            state = old * Mult + Inc;
+            var xorshifted = (uint)(((old >> 18) ^ old) >> 27);
+            var rot = (int)(old >> 59);
+            return (xorshifted >> rot) | (xorshifted << (-rot & 31));
         }
 
         public int Below(int bound)
         {
-            return (int)(Next() % (ulong)bound);
+            var b = (uint)bound;
+            var threshold = (0u - b) % b;
+            while (true)
+            {
+                var r = Next();
+                if (r >= threshold)
+                    return (int)(r % b);
+            }
         }
     }
 
@@ -493,6 +504,10 @@ namespace RandomHowl
         void BuildSpirits(World world, string seed, SpiritShuffle mode, int percent, bool scarce)
         {
             var slots = world.Spirits;
+            if (scarce)
+            {
+                slots = slots.FindAll(slot => !world.StagArenas.Contains(Key(slot.Scene, slot.Key)));
+            }
             var elder = new Dictionary<string, string>();    // species -> elder form
             var plain = new Dictionary<string, string>();    // elder form -> species
             Pairs(world.Rarity, elder, plain);

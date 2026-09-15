@@ -66,8 +66,11 @@ namespace RandomHowl
         /// cards, elder spirit gifts, the aurora's card.
         public readonly HashSet<string> Rewards = new HashSet<string>();
 
-        /// Cards only the alternate card set uses. Kept out of card pool.
+        /// Cards only the alternate card set uses. Kept out of card pool
         public readonly HashSet<string> PlusOnly = new HashSet<string>();
+
+        ///Surprise fights named StagArena. Scene plus arena UUID, as Plan.Key
+        public readonly HashSet<string> StagArenas = new HashSet<string>();
 
         /// Spirit prefab name to how the game ranks it: 0 common, 1 elder
         /// spirit, 2 boss. Filled in as the arenas are scanned.

@@ -113,6 +113,8 @@ namespace RandomHowl
             skipIntro = intro;
 
             Hook(harmony, "WorldItem", "OnEnable", nameof(ItemAppeared));
+            Hook(harmony, "EventArea", "Start", nameof(StagRemoved));
+            Hook(harmony, "CombatArena", "Start", nameof(StagRemoved));
             Hook(harmony, "CombatArena", "Start", nameof(ArenaReady));
             Hook(harmony, "CombatArena", "SpawnEnemies", nameof(ArenaReady));
             Hook(harmony, "CombatArena", "SpawnEnemies", nameof(LeftoversCollected));
@@ -506,6 +508,17 @@ namespace RandomHowl
             });
         }
 
+        /// Under scarce howls the stag fights are left out
+        public static bool StagRemoved(object __instance)
+        {
+            if (plan == null || !Plugin.Rule(Plugin.Instance.Scarce)) return true;
+            var at = ((Component)__instance).transform;
+            while (at != null && at.name != "StagEvents") at = at.parent;
+            if (at == null) return true;
+            at.gameObject.SetActive(false);
+            return false;
+        }
+
         /// Records at combat start whether this arena was already cleared.
         /// defeatedArenas is saved with the game, so this survives quitting and
         /// reloading.
@@ -549,7 +562,7 @@ namespace RandomHowl
             var data = Manager("LiveGameDataManager");
             var player = Manager("Player");
             var kept = player == null ? 0
-                : Fields.Get(player, "howlBeforeCombat") as int? ?? 0;
+                : Fields.Get(player, "soulBeforeCombat") as int? ?? 0;
             if (data == null || kept <= 0) return true;
             keepingHowls = true;
             Plugin.Instance.StartCoroutine(GiveHowlsBack(data, kept));

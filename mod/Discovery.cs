@@ -494,6 +494,10 @@ namespace RandomHowl
             var prefabs = Fields.Get(comp, "enemyPrefabs") as IList;
             if (prefabs == null) return;
             var type = Number(Fields.Get(comp, "arenaType"));
+            if (comp.gameObject.name == "StagArena")
+            {
+                world.StagArenas.Add(Plan.Key(scene, uuid));
+            }
             // The arena spawns one spirit per spawn point, up to its
             // difficulty, cycling through the prefab list. So a prefab can
             // spawn several times, or not at all.
