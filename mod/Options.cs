@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -25,8 +26,9 @@ namespace RandomHowl
         // Config key, then the label on its row.
         static readonly string[] Shuffles =
         {
-            "ingredients", "INGREDIENTS",
+            "ingredients", "MATERIALS",
             "totems",      "TOTEMS",
+            "nests",       "NESTS",
         };
 
         // The choices on the rows that are more than a yes/no. A null label
@@ -56,6 +58,15 @@ namespace RandomHowl
             else
                 harmony.Patch(start, null, new HarmonyMethod(
                     typeof(Options).GetMethod(nameof(TitleShown))));
+
+            var gameplay = AccessTools.TypeByName("ControlsSettingsMenu");
+            var tabShown = gameplay == null ? null : AccessTools.Method(gameplay, "OnEnable");
+            if (tabShown == null)
+                log.LogWarning("no ControlsSettingsMenu.OnEnable — skip logos, skip "
+                               + "intro and auto text are only in the config file");
+            else
+                harmony.Patch(tabShown, null, new HarmonyMethod(
+                    typeof(Options).GetMethod(nameof(GameplayShown))));
 
             // Every run goes through DoLoadFlow. A run started before the world
             // scan finishes would load its first scenes unpatched, so hold it
@@ -262,9 +273,6 @@ namespace RandomHowl
             AddToggle(list, template, "CARDS UNLOCKED", plugin.RevealCards);
             AddToggle(list, template, "TEAR HEALTH", plugin.TearHealth);
             AddToggle(list, template, "OPEN WORLD", plugin.OpenWorld);
-            AddToggle(list, template, "SKIP LOGOS", plugin.SkipLogos);
-            AddToggle(list, template, "SKIP INTRO", plugin.SkipIntro);
-            AddToggle(list, template, "AUTO TEXT", plugin.AutoText);
             AddToggle(list, template, "SPOILER LOG", plugin.SpoilerLog);
             var rowSize = (template.transform as RectTransform)?.sizeDelta ?? Vector2.zero;
             MakeSeedRow(template);
@@ -437,6 +445,105 @@ namespace RandomHowl
             Apply();
         }
 
+        // --- settings > gameplay --------------------------------------------
+
+        /// Skip logos, skip intro and auto text aren't about the shuffle, so
+        /// they sit with the game's own options. The tab turns on each time it
+        /// opens: add the rows the first time, then show the current values.
+        public static void GameplayShown(Component __instance)
+        {
+            try
+            {
+                if (__instance.GetComponent<GameplayRows>() == null)
+                {
+                    __instance.gameObject.AddComponent<GameplayRows>();
+                    AddGameplayRows(__instance);
+                }
+                var on = Patches.Translate(__instance, "onText") ?? "ON";
+                var off = Patches.Translate(__instance, "offText") ?? "OFF";
+                foreach (var row in __instance.GetComponentsInChildren<SettingRow>(true))
+                    row.Show(on, off);
+            }
+            catch (Exception e) { log.LogError("no extras on the gameplay tab: " + e); }
+        }
+
+        static void AddGameplayRows(Component menu)
+        {
+            // This list is what a controller moves down.
+            var handlerType = AccessTools.TypeByName("AudioSettingsMenuControlsHandler");
+            var handler = handlerType == null ? null : menu.GetComponent(handlerType);
+            var items = handler == null ? null : Fields.Get(handler, "items") as List<GameObject>;
+            if (items == null || items.Count < 2)
+            {
+                log.LogWarning("the gameplay tab is not shaped the way we expect — "
+                               + "skip logos, skip intro and auto text are only in "
+                               + "the config file");
+                return;
+            }
+            // Each new row goes as far below the last as the last is below the
+            // one before it.
+            var step = Position(items[items.Count - 1]) - Position(items[items.Count - 2]);
+            var plugin = Plugin.Instance;
+            AddSettingRow(items, step, "SKIP LOGOS", plugin.SkipLogos);
+            AddSettingRow(items, step, "SKIP INTRO", plugin.SkipIntro);
+            AddSettingRow(items, step, "AUTO TEXT", plugin.AutoText);
+        }
+
+        static Vector2 Position(GameObject go)
+        {
+            var rect = go.transform as RectTransform;
+            return rect == null ? Vector2.zero : rect.anchoredPosition;
+        }
+
+        /// Copy the last row: a toggle with its name and an ON/OFF text.
+        static void AddSettingRow(List<GameObject> items, Vector2 step, string label,
+                                  ConfigEntry<bool> config)
+        {
+            var last = items[items.Count - 1];
+            var go = UnityEngine.Object.Instantiate(last, last.transform.parent);
+            go.name = label;
+            go.transform.SetSiblingIndex(last.transform.GetSiblingIndex() + 1);
+            var rect = go.transform as RectTransform;
+            if (rect != null) rect.anchoredPosition = Position(last) + step;
+
+            var toggle = go.GetComponent<Toggle>();
+            if (toggle == null)
+            {
+                log.LogWarning("gameplay tab rows are not toggles — no " + label + " row");
+                UnityEngine.Object.Destroy(go);
+                return;
+            }
+            // A new event drops the copied call to the game's own setting.
+            toggle.onValueChanged = new Toggle.ToggleEvent();
+            items.Add(go);
+
+            var row = go.AddComponent<SettingRow>();
+            row.Config = config;
+            foreach (var text in go.GetComponentsInChildren<Text>(true))
+            {
+                if (text.name == "OnState")
+                {
+                    row.Value = text;
+                    continue;
+                }
+                Unlocalize(text.gameObject);
+                text.text = label;
+            }
+            toggle.isOn = config.Value;
+            toggle.onValueChanged.AddListener(row.Changed);
+        }
+
+        /// The game's toggles play this click themselves, so ours do too.
+        internal static void Click()
+        {
+            var audio = Patches.Manager("AudioHandler");
+            var sounds = audio == null ? null : Fields.Get(audio, "sounds");
+            var sound = sounds == null ? null : Fields.Get(sounds, "buttonClicked1");
+            var play = sound == null ? null
+                : AccessTools.Method(sound.GetType(), "PlayByAudioHandler", Type.EmptyTypes);
+            if (play != null) play.Invoke(sound, null);
+        }
+
         // --- odds and ends ---------------------------------------------------
 
         /// The title menu clears the UI selection every frame unless one of its
@@ -538,6 +645,44 @@ namespace RandomHowl
             if (index < 0 || index >= Values.Length) return;
             Chosen(Values[index]);
             Options.Apply();
+        }
+    }
+
+    /// Marks a gameplay tab that already has our rows.
+    public class GameplayRows : MonoBehaviour { }
+
+    /// One yes/no row on the gameplay tab.
+    public class SettingRow : MonoBehaviour
+    {
+        public ConfigEntry<bool> Config;
+        public Text Value;
+        string on = "ON";
+        string off = "OFF";
+
+        /// Each time the tab opens, since the title and pause menus each have
+        /// a copy, and the language may have changed.
+        public void Show(string onText, string offText)
+        {
+            on = onText;
+            off = offText;
+            var toggle = GetComponent<Toggle>();
+            if (toggle != null) toggle.isOn = Config.Value;
+            Label();
+        }
+
+        public void Changed(bool isOn)
+        {
+            if (Config == null || Config.Value == isOn) return;
+            Config.Value = isOn;
+            // Not Options.Apply: in a run that would drop the save's settings.
+            Plugin.Instance.Config.Save();
+            Label();
+            Options.Click();
+        }
+
+        void Label()
+        {
+            if (Value != null) Value.text = Config.Value ? on : off;
         }
     }
 

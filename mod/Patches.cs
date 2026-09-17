@@ -17,7 +17,6 @@ namespace RandomHowl
     {
         static Plan plan;
         static ManualLogSource log;
-        static bool skipIntro;
         static MethodInfo skipLogos;
         static bool logosSkipped;
         static bool keepingHowls;
@@ -38,7 +37,7 @@ namespace RandomHowl
 
         /// The logos are gone before the world scan finishes, so this goes on
         /// in Awake and stays on. Install runs too late.
-        public static void InstallExtras(Harmony harmony, ManualLogSource logger, bool logos)
+        public static void InstallExtras(Harmony harmony, ManualLogSource logger)
         {
             log = logger;
             // Ro is in the always-loaded manager scene, so her Awake can run
@@ -90,7 +89,11 @@ namespace RandomHowl
             // A deleted save takes its randomizer settings with it.
             Hook(harmony, "PersistantDataManager", "DeleteProfile", nameof(ProfileDeleted), true);
 
-            if (!logos) return;
+            // Skip logos and skip intro read the config as they fire, like any
+            // other gameplay setting, whatever save is loaded.
+            Hook(harmony, "CutSceneSequence", "Show", nameof(CutsceneStarted));
+            Hook(harmony, "ScriptableEventArea", "DoHandleMidPartOfEventFlow", nameof(QuickScene));
+
             var type = AccessTools.TypeByName("LogoIntroHandler");
             skipLogos = type == null ? null
                 : AccessTools.Method(type, "StopAndSkipVideoIntro");
@@ -105,12 +108,10 @@ namespace RandomHowl
             Hook(harmony, "LogoIntroHandler", "Update", nameof(LogosShowing));
         }
 
-        public static void Install(Harmony harmony, ManualLogSource logger, Plan shuffled,
-                                   bool intro)
+        public static void Install(Harmony harmony, ManualLogSource logger, Plan shuffled)
         {
             plan = shuffled;
             log = logger;
-            skipIntro = intro;
 
             Hook(harmony, "WorldItem", "OnEnable", nameof(ItemAppeared));
             Hook(harmony, "EventArea", "Start", nameof(StagRemoved));
@@ -124,12 +125,16 @@ namespace RandomHowl
             Hook(harmony, "EnterOrExitCaveEvent", "DoHandleMidPartOfEventFlow", nameof(CaveEntered));
             Hook(harmony, "CombatArena", "OnCombatStarted", nameof(DeathSpawn));
             Hook(harmony, "EventComponentRecieveTotem", "DoRun", nameof(TotemGiven));
+            Hook(harmony, "Treasure", "DoSpawnTreasures", nameof(TreasureOpened));
+            foreach (var quest in Discovery.TotemRewards.Keys)
+                Hook(harmony, quest, "DoHandleMidPartOfEventFlow", nameof(TotemRewardGiven));
+            // The profile is open by now: the managers scene loads after
+            // DoLoadFlow, which rebuilds the plan first.
+            Hook(harmony, "LiveGameDataManager", "OnGameLoaded", nameof(MiniBossTotemsChecked));
             Hook(harmony, "EventComponentRecieveCard", "DoRun", nameof(CardGiven));
             Hook(harmony, "ProgressionData", "Unlock", nameof(SkillBought));
             Hook(harmony, "CardData", "allowUnlockByCrafting", nameof(CardCraftable),
                  true, getter: true);
-            if (skipIntro)
-                Hook(harmony, "CutSceneSequence", "Show", nameof(CutsceneStarted));
         }
 
         static void Hook(Harmony harmony, string className, string methodName, string ours,
@@ -174,11 +179,12 @@ namespace RandomHowl
             {
                 var item = (Component)__instance;
                 string guid;
-                if (!plan.Ingredients.TryGetValue(Keys.Uuid(item), out guid)) return;
+                if (!plan.Ingredients.TryGetValue(Keys.Uuid(item), out guid)
+                    && !plan.Totems.TryGetValue(Keys.Uuid(item), out guid)) return;
                 var data = Registry.Item(guid);
-                if (data == null) { Missing("ingredient", guid); return; }
+                if (data == null) { Missing("item", guid); return; }
                 Fields.Set(__instance, "data", data);
-                // Show the new ingredient's sprite too.
+                // Show the new item's sprite too.
                 var renderer = Fields.Get(__instance, "spriteRenderer") as SpriteRenderer;
                 var sprite = Fields.Get(data, "IllustrationWorld") as Sprite;
                 if (renderer != null && sprite != null) renderer.sprite = sprite;
@@ -256,6 +262,78 @@ namespace RandomHowl
                 var data = Registry.Item(guid);
                 if (data == null) Missing("totem", guid);
                 else Fields.Set(__instance, "data", data);
+            });
+        }
+
+        /// Quest events that give a totem from their own field.
+        public static void TotemRewardGiven(object __instance)
+        {
+            Guard("totem reward", () =>
+            {
+                string field;
+                string guid;
+                if (!Discovery.TotemRewards.TryGetValue(__instance.GetType().Name, out field)
+                    || !plan.Totems.TryGetValue(Keys.Event((Component)__instance), out guid)) return;
+                var data = Registry.Item(guid);
+                if (data == null) Missing("totem", guid);
+                else Fields.Set(__instance, field, data);
+            });
+        }
+
+        /// Vanilla totem for each mini-boss flag, saved the first time it's
+        /// read so a later load doesn't start from an already swapped list.
+        static readonly Dictionary<int, string> miniBossVanilla = new Dictionary<int, string>();
+
+        /// Each load, the game gives the totem of every beaten mini-boss the
+        /// player doesn't have. Point that list at the shuffled totems, or a
+        /// load hands out the vanilla totem on top of the shuffled one.
+        public static void MiniBossTotemsChecked(object __instance)
+        {
+            Guard("mini-boss totems", () =>
+            {
+                var list = Fields.Get(__instance, "miniBossTotems") as IList;
+                if (list == null) return;
+                foreach (var entry in list)
+                {
+                    var flag = Convert.ToInt32(Fields.Get(entry, "rewardAlterationID"));
+                    string vanilla;
+                    if (!miniBossVanilla.TryGetValue(flag, out vanilla))
+                    {
+                        var data = Fields.Get(entry, "data") as UnityEngine.Object;
+                        miniBossVanilla[flag] = vanilla = data == null ? null : Registry.GuidOf(data);
+                    }
+                    if (vanilla == null) continue;
+                    string guid;
+                    if (!plan.TotemsFrom.TryGetValue(vanilla, out guid)) guid = vanilla;
+                    var totem = Registry.Item(guid);
+                    if (totem == null) Missing("mini-boss totem", guid);
+                    else Fields.Set(entry, "data", totem);
+                }
+            });
+        }
+
+        /// A nest reads its contents when it opens, so swap them in just
+        /// before: the plan's items and blood tears.
+        public static void TreasureOpened(object __instance)
+        {
+            Guard("nest", () =>
+            {
+                if (Fields.Get(__instance, "treasureHasBeenRemoved") as bool? ?? true) return;
+                var nest = (Component)__instance;
+                var uuid = Registry.Uuid(nest.gameObject);
+                var items = Fields.Get(__instance, "treasures") as IList;
+                Nest wanted;
+                if (uuid == null || items == null
+                    || !plan.Nests.TryGetValue(Plan.Key(nest.gameObject.scene.name, uuid), out wanted))
+                    return;
+                items.Clear();
+                foreach (var guid in wanted.Items)
+                {
+                    var data = guid == null ? null : Registry.Item(guid);
+                    if (data == null) Missing("nest item", guid);
+                    else items.Add(data);
+                }
+                Fields.Set(__instance, "skillPoints", wanted.Tears);
             });
         }
 
@@ -727,6 +805,7 @@ namespace RandomHowl
         {
             if (logosSkipped) return;
             logosSkipped = true;
+            if (!Plugin.Instance.SkipLogos.Value) return;
             Guard("logo intro", () =>
             {
                 Fields.Set(__instance, "escPressed", true);
@@ -736,6 +815,7 @@ namespace RandomHowl
 
         public static void CutsceneStarted(object __instance)
         {
+            if (!Plugin.Instance.SkipIntro.Value) return;
             Guard("cutscene", () =>
             {
                 if (!IsIntro(__instance)) return;
@@ -749,6 +829,172 @@ namespace RandomHowl
                     Fields.Set(frame, "audio", null);
                 }
             });
+        }
+
+        // Scenes played without pauses, by scene and then event name.
+        static readonly Dictionary<string, HashSet<string>> QuickScenes =
+            new Dictionary<string, HashSet<string>>
+        {
+            ["TutorialForest"] = new HashSet<string>
+            {
+                "SorgCoreEventLasse",
+                "AtTheLakeEventNew",
+            },
+            ["Waterfalls"] = new HashSet<string>
+            {
+                "MooseExplainsEverything(FullGame)",
+                "MooseExplainsEverything(Demo)",
+            },
+            ["Cliffs"] = new HashSet<string> { "MooseAct2" },
+            ["Meadow"] = new HashSet<string> { "MooseAct2" },
+            ["Marshes"] = new HashSet<string> { "MooseAct2" },
+            ["Moors"] = new HashSet<string> { "MooseAct2" },
+            ["Mountain"] = new HashSet<string> { "MeetMooseAtBottom" },
+        };
+
+        /// Swaps a scene's steps for ones with no waiting. The event still
+        /// starts and ends as usual, so input, audio, saving and the quest
+        /// banner are handled by the game.
+        public static bool QuickScene(object __instance, ref IEnumerator __result)
+        {
+            if (!Plugin.Instance.SkipIntro.Value) return true;
+            IEnumerator quick = null;
+            Guard("quick scene", () =>
+            {
+                var area = ((Component)__instance).gameObject;
+                HashSet<string> names;
+                if (!QuickScenes.TryGetValue(area.scene.name, out names) || !names.Contains(area.name)) return;
+                var flow = Fields.Get(__instance, "eventFlow") as IList;
+                if (flow != null) quick = PlayAtOnce(flow);
+            });
+            if (quick == null) return true;
+            __result = quick;
+            return false;
+        }
+
+        /// Steps that don't need a fade to finish first, since they only fade
+        /// too or show nothing.
+        static readonly HashSet<string> SkipsFadeWait = new HashSet<string>
+        {
+            "EventComponentTweenMaterialProperty", "EventComponentDeerAppear",
+            "EventComponentDeerDisappear", "EventComponentDialogue",
+            "EventComponentPlaySound", "EventComponentOverHeadText",
+            "EventComponentPresentGreatSpiritsMuralPanel",
+            "EventComponentPresentGreatSpiritsOnMap",
+        };
+
+        /// Runs every step in order without the pauses between them. Fades
+        /// next to each other play together, and the scene waits for them to
+        /// end before going on, so hiding a character doesn't cut its fade.
+        static IEnumerator PlayAtOnce(IList flow)
+        {
+            var fadesEnd = 0f;
+            foreach (var entry in flow)
+            {
+                var step = Fields.Get(entry, "component");
+                if (step == null) continue;
+                if (!SkipsFadeWait.Contains(step.GetType().Name) && Time.time < fadesEnd)
+                    yield return new WaitForSeconds(fadesEnd - Time.time);
+                IEnumerator wait = null;
+                var fade = 0f;
+                Guard("quick scene step", () => wait = StepAtOnce(step, out fade));
+                fadesEnd = Mathf.Max(fadesEnd, Time.time + fade);
+                if (wait != null) yield return wait;
+            }
+        }
+
+        /// Starts one step without its pauses. Dialogue is marked seen but not
+        /// shown, and sounds are left out. Fades play as usual, and how long a
+        /// fade left running takes is put in fade. Animations and flickers
+        /// jump to how they end. Walks still happen and are waited on, so Ro
+        /// stands where the next event expects. Blood tears still show their
+        /// popup. Returns what to wait on, if anything.
+        static IEnumerator StepAtOnce(object step, out float fade)
+        {
+            fade = 0f;
+            var walk = false;
+            switch (step.GetType().Name)
+            {
+                case "EventComponentDialogue":
+                    MarkSeen(step);
+                    return null;
+                case "EventComponentPlaySound":
+                case "EventComponentOverHeadText":
+                    return null;
+                case "EventComponentTweenMaterialProperty":
+                    fade = Fields.Get(step, "duration") as float? ?? 0f;
+                    break;
+                case "EventComponentDeerAppear":
+                case "EventComponentDeerDisappear":
+                    // The moose fades in or out over 1 second
+                    fade = 1f;
+                    break;
+                case "EventComponentTweenPositionToObject":
+                    Fields.Set(step, "duration", 0f);
+                    break;
+                case "EventComponentPlayAnimationSequence":
+                    (Fields.Get(step, "tempAnimations") as IList)?.Clear();
+                    break;
+                case "EventComponentFlickerAntlers":
+                    (Fields.Get(step, "cyclesTiming") as IList)?.Clear();
+                    break;
+                case "EventComponentWalkTo":
+                case "EventComponentWalkDeer":
+                    walk = true;
+                    break;
+                case "EventComponentPlayAnimation":
+                    // Plays on its own while the scene goes on
+                    StartOnManager(Call(step, "DoRun") as IEnumerator);
+                    return null;
+                case "EventComponentPresentGreatSpiritsMuralPanel":
+                    return null;
+                case "EventComponentPresentGreatSpiritsOnMap":
+                    // The map showing was what unlocked it
+                    Fields.Set(Manager("LiveGameDataManager"), "overworldMapUnlocked", true);
+                    return null;
+                case "EventComponentMooseOpensPassages":
+                    // Still runs, as it hides the blocked paths on the map
+                    foreach (var timing in new[] { "delayAfterOpen", "moveDuration", "dissolveDuration" })
+                        Fields.Set(step, timing, 0f);
+                    break;
+            }
+            var run = Call(step, "DoRun") as IEnumerator;
+            if (run == null) return null;
+            if (walk || (Call(step, "WaitUntilCompleted") as bool? ?? false))
+            {
+                fade = 0f;
+                return run;
+            }
+            StartOnManager(run);
+            return null;
+        }
+
+        static void StartOnManager(IEnumerator run)
+        {
+            if (run != null) ((MonoBehaviour)Manager("LiveGameDataManager")).StartCoroutine(run);
+        }
+
+        /// Marks the line a dialogue step would show as seen. A step with a
+        /// list or pack shows the first line not seen yet.
+        static void MarkSeen(object step)
+        {
+            var line = Fields.Get(step, "data");
+            foreach (var pick in new[] { "dialogueList", "dialoguePack" })
+            {
+                var optional = Fields.Get(step, pick);
+                if (optional == null || !(Fields.Get(optional, "isSet") as bool? ?? false)) continue;
+                var value = Fields.Get(optional, "value");
+                if (value == null) continue;
+                var lines = pick == "dialogueList" ? value : Fields.Get(value, "dialogues");
+                if (!(lines is IEnumerable)) continue;
+                foreach (var each in (IEnumerable)lines)
+                {
+                    if (each == null || (Call(each, "IsSeenByPlayer") as bool? ?? true)) continue;
+                    line = each;
+                    break;
+                }
+            }
+            if (line != null) Call(line, "MarkAsSeenByPlayer");
         }
 
         // --- no tutorial ----------------------------------------------------
@@ -843,7 +1089,7 @@ namespace RandomHowl
             else fakeButton = null;
         }
 
-        static string Translate(object tips, string field, string parameter = null)
+        internal static string Translate(object tips, string field, string parameter = null)
         {
             var data = Fields.Get(tips, field);
             if (data == null) return null;

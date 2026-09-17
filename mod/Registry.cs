@@ -215,6 +215,24 @@ namespace RandomHowl
         {
             return Plan.Key(NodeScene, NodeKey(node));
         }
+
+        /// A chest can hold several items, so its UUID plus the item's spot
+        /// in its list.
+        public static string TreasureKey(string uuid, int index)
+        {
+            return uuid + "#" + index;
+        }
+
+        /// Quest events use their UUID when they have one, else their path.
+        public static string EventKey(Component component)
+        {
+            return Registry.Uuid(component.gameObject) ?? Path(component.transform);
+        }
+
+        public static string Event(Component component)
+        {
+            return Plan.Key(component.gameObject.scene.name, EventKey(component));
+        }
     }
 
     /// Cached field access, since every patch pokes the same few fields.

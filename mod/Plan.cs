@@ -89,9 +89,14 @@ namespace RandomHowl
     {
         public readonly Dictionary<string, string> Ingredients = new Dictionary<string, string>();
         public readonly Dictionary<string, string> Totems = new Dictionary<string, string>();
+        /// Vanilla totem to the totem now given in its place. Only right for
+        /// totems with one source, like the mini-boss ones.
+        public readonly Dictionary<string, string> TotemsFrom = new Dictionary<string, string>();
         public readonly Dictionary<string, Entrance> Entrances = new Dictionary<string, Entrance>();
         public readonly Dictionary<string, string[]> Spirits = new Dictionary<string, string[]>();
         public readonly Dictionary<string, string> Cards = new Dictionary<string, string>();
+        /// What each nest holds now, keyed by scene plus nest UUID.
+        public readonly Dictionary<string, Nest> Nests = new Dictionary<string, Nest>();
         public readonly Dictionary<string, Ingredient[]> Recipes = new Dictionary<string, Ingredient[]>();
         public readonly Dictionary<string, string> Grants = new Dictionary<string, string>();
         /// Reward cards no reward hands over any more, which can be crafted now.
@@ -126,8 +131,13 @@ namespace RandomHowl
                 foreach (var moved in Permute(TotemSlots(world), seed, "totems"))
                 {
                     plan.Totems[Key(moved.Slot.Scene, moved.Slot.Key)] = moved.Value;
+                    plan.TotemsFrom[moved.Slot.Value] = moved.Value;
                     plan.Note("totem", world, "item", moved);
                 }
+
+            // After the two above, since a nest takes its items as they were
+            // shuffled.
+            plan.BuildNests(world, seed, enabled("nests"));
 
             if (entrances != EntranceShuffle.Off)
             {
@@ -302,6 +312,38 @@ namespace RandomHowl
             foreach (var node in world.Nodes)
                 if (node.Index == TotemNode) slots.Add(node);
             return Ordered(slots);
+        }
+
+        /// What each nest holds. With nests on, a nest gets another nest's
+        /// blood tears and items. The items were already shuffled as ingredients
+        /// and totems in the nest they came from. With nests off, each nest
+        /// keeps its own.
+        void BuildNests(World world, string seed, bool shuffle)
+        {
+            var byKey = new Dictionary<string, Nest>();
+            var slots = new List<Slot>();
+            foreach (var nest in world.Nests)
+            {
+                var key = Key(nest.Scene, nest.Key);
+                byKey[key] = nest;
+                slots.Add(Slot.Of(nest.Scene, nest.Key, key));
+            }
+            foreach (var moved in Permute(Ordered(slots), seed, "nests", shuffle))
+            {
+                var from = byKey[moved.Value];
+                var items = new string[from.Items.Length];
+                for (var i = 0; i < items.Length; i++)
+                {
+                    var spot = Key(from.Scene, Keys.TreasureKey(from.Key, i));
+                    if (!Ingredients.TryGetValue(spot, out items[i])
+                        && !Totems.TryGetValue(spot, out items[i]))
+                        items[i] = from.Items[i];
+                }
+                Nests[moved.Slot.Value] = new Nest
+                    { Scene = from.Scene, Key = from.Key, Tears = from.Tears, Items = items };
+                Note("nest", moved.Slot.Scene + " " + moved.Slot.Key, world, "nest",
+                     moved.Slot.Scene + " " + moved.Slot.Key, from.Scene + " " + from.Key);
+            }
         }
 
         /// Which card each reward hands over: the aurora, and the blood tears
@@ -493,7 +535,7 @@ namespace RandomHowl
         static readonly HashSet<string> Environmental = new HashSet<string>
         {
             "Lifeblood (ThornyBushSpecialTile)", "BerryTree", "SwirlOfFrailty", "SwirlOfStrength", "ExplodingPlant",
-            "TotemRock",
+            "TotemRock", "EggSpecialTile",
         };
 
         /// Spirits move as species, not prefabs: Owl and OwlElite are one
@@ -504,11 +546,10 @@ namespace RandomHowl
         /// spawns of each form are set aside for the cards first.
         void BuildSpirits(World world, string seed, SpiritShuffle mode, int percent, bool scarce)
         {
-            var slots = world.Spirits;
-            if (scarce)
-            {
-                slots = slots.FindAll(slot => !world.StagArenas.Contains(Key(slot.Scene, slot.Key)));
-            }
+            // Tutorial fight is left out and copies Dark Forest fight at the end.
+            var tutorial = Key(TutorialScene, TutorialArena);
+            var slots = world.Spirits.FindAll(slot => Key(slot.Scene, slot.Key) != tutorial
+                && !(scarce && world.StagArenas.Contains(Key(slot.Scene, slot.Key))));
             var elder = new Dictionary<string, string>();    // species -> elder form
             var plain = new Dictionary<string, string>();    // elder form -> species
             Pairs(world.Rarity, elder, plain);
@@ -614,7 +655,24 @@ namespace RandomHowl
                 if (slots[i].Index < arena.Length) arena[slots[i].Index] = name;
                 Note("spirit", world, "prefab", slots[i], name);
             }
+
+            string[] later;
+            if (Spirits.TryGetValue(Key(LaterScene, LaterArena), out later))
+            {
+                Spirits[tutorial] = (string[])later.Clone();
+                foreach (var slot in world.Spirits)
+                    if (Key(slot.Scene, slot.Key) == tutorial && slot.Index < later.Length)
+                        Note("spirit", world, "prefab", slot, later[slot.Index]);
+            }
         }
+
+        /// The first fight, one boar, is played twice: in the tutorial, then
+        /// again in the Dark Forest after the dead moose, as a different arena
+        /// in the same spot. The tutorial copy shows whatever the Dark Forest
+        /// one was shuffled to. Nothing is planned on the tutorial copy, since
+        /// nothing from it is kept.
+        const string TutorialScene = "TutorialForest", TutorialArena = "tutorial_arena";
+        const string LaterScene = "DarkForest", LaterArena = "36b84819-98cd-4901-8bcf-6cdc4393c322";
 
         /// Elder spirits the rule below misses: the game ranks them common, or
         /// their name doesn't match.

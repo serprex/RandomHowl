@@ -372,6 +372,9 @@ namespace RandomHowl
             kinds.Clear();
             AddKind("WorldItem", ScanIngredient);
             AddKind("EventComponentRecieveTotem", ScanTotem);
+            AddKind("Treasure", ScanTreasure);
+            foreach (var quest in TotemRewards)
+                AddKind(quest.Key, (comp, scene, world) => ScanReward(comp, scene, world, quest.Value));
             AddKind("EventComponentRecieveCard", ScanGrant);
             AddKind("EnterOrExitCaveEvent", ScanEntrance);
             AddKind("CombatArena", ScanArena);
@@ -407,12 +410,13 @@ namespace RandomHowl
         {
             var data = Fields.Get(comp, "data") as UnityEngine.Object;
             // Some pickups hand over a card for an event, like Scale Shield.
-            // Only ingredients move.
-            if (IngredientType != null && !IngredientType.IsInstanceOfType(data)) return;
+            // Only ingredients and totems move.
+            var totem = TotemType != null && TotemType.IsInstanceOfType(data);
+            if (!totem && IngredientType != null && !IngredientType.IsInstanceOfType(data)) return;
             var guid = data == null ? null : Registry.GuidOf(data);
             var uuid = Registry.Uuid(comp.gameObject);
             if (uuid == null || guid == null) return;
-            world.Ingredients.Add(Slot.Of(scene, uuid, guid));
+            (totem ? world.Totems : world.Ingredients).Add(Slot.Of(scene, uuid, guid));
         }
 
         static void ScanTotem(Component comp, string scene, World world)
@@ -422,6 +426,57 @@ namespace RandomHowl
             var uuid = Registry.Uuid(comp.gameObject) ?? Keys.Path(comp.transform);
             if (uuid == null || guid == null) return;
             world.Totems.Add(Slot.Of(scene, uuid, guid));
+        }
+
+        /// Nests. Each item joins the ingredient or totem shuffle by its spot
+        /// in the nest, and the nest with its blood tears joins the nest
+        /// shuffle.
+        static void ScanTreasure(Component comp, string scene, World world)
+        {
+            var uuid = Registry.Uuid(comp.gameObject);
+            if (uuid == null) return;
+            var items = Fields.Get(comp, "treasures") as IList;
+            var nest = new Nest
+            {
+                Scene = scene, Key = uuid, Tears = Number(Fields.Get(comp, "skillPoints")),
+                Items = new string[items == null ? 0 : items.Count],
+            };
+            for (var i = 0; i < nest.Items.Length; i++)
+            {
+                var data = items[i] as UnityEngine.Object;
+                var guid = data == null ? null : Registry.GuidOf(data);
+                nest.Items[i] = guid;
+                if (guid == null) continue;
+                var slot = Slot.Of(scene, Keys.TreasureKey(uuid, i), guid);
+                if (TotemType != null && TotemType.IsInstanceOfType(data)) world.Totems.Add(slot);
+                else if (IngredientType != null && IngredientType.IsInstanceOfType(data))
+                    world.Ingredients.Add(slot);
+            }
+            // Leave out empty nests, like the unused one in MarshesCaveB, so
+            // nothing gets shuffled into them.
+            if (nest.Tears > 0 || nest.Items.Length > 0) world.Nests.Add(nest);
+        }
+
+        static readonly Type TotemType = AccessTools.TypeByName("TotemData");
+
+        /// Quest events that hand over a totem from a field of their own, and
+        /// that field.
+        public static readonly Dictionary<string, string> TotemRewards = new Dictionary<string, string>
+        {
+            { "BigFishQuestCompletedEvent", "totemReward" },
+            { "BlindBeakDeliverEyesEventArea", "totemReward" },
+            { "CompletedAlgaeWhaleQuestEvent", "totemReward" },
+            { "CompletedMotherQuestEvent", "totemReward" },
+            { "ReturnBlueTitArea", "totemReward" },
+            { "CompleteThornedCreatureQuestEventArea", "totem" },
+        };
+
+        static void ScanReward(Component comp, string scene, World world, string field)
+        {
+            var data = Fields.Get(comp, field) as UnityEngine.Object;
+            var guid = data == null ? null : Registry.GuidOf(data);
+            if (guid == null) return;
+            world.Totems.Add(Slot.Of(scene, Keys.EventKey(comp), guid));
         }
 
         /// Which card an event hands over. Only realm cards move, since most

@@ -22,6 +22,10 @@ namespace RandomHowl
         // Ingredients found in current region, worked out when the screen opens.
         static readonly HashSet<string> here = new HashSet<string>();
 
+        // Every ingredient id, and the ingredient slots that sit in nests.
+        static readonly HashSet<string> ingredients = new HashSet<string>();
+        static readonly HashSet<string> nestItems = new HashSet<string>();
+
         // Scene to the zone it belongs to, from the game's region list.
         static Dictionary<string, UnityEngine.Object> zones;
 
@@ -31,6 +35,12 @@ namespace RandomHowl
             log = logger;
             world = scanned;
             plan = shuffled;
+            ingredients.Clear();
+            nestItems.Clear();
+            foreach (var slot in world.Ingredients) ingredients.Add(slot.Value);
+            foreach (var nest in world.Nests)
+                for (var i = 0; i < nest.Items.Length; i++)
+                    nestItems.Add(Plan.Key(nest.Scene, Keys.TreasureKey(nest.Key, i)));
             Patch(harmony, "IngredientsManager", "OnEnable", nameof(ScreenOpening), false);
             Patch(harmony, "IngredientSlot", "SetRim", nameof(RimSet), true);
             Patch(harmony, "IngredientsManager", "OnEndHoverOverSlot", nameof(HoverEnded), true);
@@ -117,12 +127,22 @@ namespace RandomHowl
 
             foreach (var slot in world.Ingredients)
             {
-                if (!scenes.Contains(slot.Scene)) continue;
+                if (!scenes.Contains(slot.Scene) || nestItems.Contains(Plan.Key(slot.Scene, slot.Key))) continue;
                 if (taken != null && taken.Contains(slot.Key)) continue;
                 string item;
                 if (!plan.Ingredients.TryGetValue(Plan.Key(slot.Scene, slot.Key), out item))
                     item = slot.Value;
                 here.Add(item);
+            }
+
+            // Nests can move, so go by what each nest holds now.
+            foreach (var entry in plan.Nests)
+            {
+                var parts = entry.Key.Split('\u0001');
+                if (parts.Length != 2 || !scenes.Contains(parts[0])) continue;
+                if (taken != null && taken.Contains(parts[1])) continue;
+                foreach (var item in entry.Value.Items)
+                    if (item != null && ingredients.Contains(item)) here.Add(item);
             }
 
             // Under scarce howls a fight only drops on its first win, and the

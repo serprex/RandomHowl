@@ -30,6 +30,15 @@ namespace RandomHowl
         public int Amount;
     }
 
+    /// A nest: its blood tears, and the items it holds in order.
+    public class Nest
+    {
+        public string Scene;
+        public string Key;          // the nest's UUID
+        public int Tears;
+        public string[] Items;      // item ids; null where an item has no id
+    }
+
     /// Where a spawn point stands: its scene, and its spot in that scene.
     public struct Place
     {
@@ -71,6 +80,10 @@ namespace RandomHowl
 
         ///Surprise fights named StagArena. Scene plus arena UUID, as Plan.Key
         public readonly HashSet<string> StagArenas = new HashSet<string>();
+
+        /// Every nest that holds something. Its items are also in Ingredients
+        /// or Totems, keyed by Keys.TreasureKey.
+        public readonly List<Nest> Nests = new List<Nest>();
 
         /// Spirit prefab name to how the game ranks it: 0 common, 1 elder
         /// spirit, 2 boss. Filled in as the arenas are scanned.

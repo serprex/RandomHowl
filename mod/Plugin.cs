@@ -73,9 +73,12 @@ namespace RandomHowl
             Shuffles = new Dictionary<string, ConfigEntry<bool>>
             {
                 { "totems", Config.Bind("shuffle", "totems", true,
-                    "which totem each totem pickup gives") },
+                    "which totem each totem reward gives, nests included") },
                 { "ingredients", Config.Bind("shuffle", "ingredients", true,
-                    "which ingredient each world pickup is") },
+                    "which ingredient each world pickup and nest gives") },
+                { "nests", Config.Bind("shuffle", "nests", true,
+                    "which nest gets each nest's blood tears and items. Totems and "
+                    + "ingredients in nests still shuffle with the rest of the world") },
                 { "card_realms", Config.Bind("shuffle", "card_realms", true,
                     "which realm each card belongs to") },
                 { "recipes", Config.Bind("shuffle", "recipes", true,
@@ -108,9 +111,7 @@ namespace RandomHowl
 
             PlayerEnergy = Config.Bind("combat", "player_energy", 5,
                 new ConfigDescription(
-                    "Ro's energy per turn in a custom mode game, before totems "
-                    + "and skills add to it. This is the ENERGY row on the custom "
-                    + "mode screen",
+                    "Ro's base energy per turn in a custom mode game.",
                     new AcceptableValueRange<int>(1, 20)));
 
             Scarce = Config.Bind("rules", "scarce_howls", false,
@@ -129,12 +130,11 @@ namespace RandomHowl
                 "paths from forest are open from the start");
 
             SkipLogos = Config.Bind("extras", "skip_logos", true,
-                "jump straight past the publisher logos to the title screen");
+                "skip to title screen");
             SkipIntro = Config.Bind("extras", "skip_intro", true,
-                "skip the 83 second opening cutscene");
+                "skip opening cutscenes");
             AutoText = Config.Bind("extras", "auto_text", false,
-                "dialogue boxes show each line in full and move on without "
-                + "a click. Choices still wait for you to pick one");
+                "dialogue boxes instantly flash by.");
             SpoilerLog = Config.Bind("extras", "spoiler_log", true,
                 "write spoiler-<seed>.txt next to this plugin");
 
@@ -155,7 +155,7 @@ namespace RandomHowl
             // The extras go on now, on their own Harmony, so Rebuild's unpatch
             // doesn't remove them.
             var extras = new Harmony(Id + ".extras");
-            Patches.InstallExtras(extras, Logger, SkipLogos.Value);
+            Patches.InstallExtras(extras, Logger);
             Options.Install(extras, Logger);
             Custom.Install(extras, Logger);
 
@@ -205,7 +205,7 @@ namespace RandomHowl
             plan = Plan.Build(world, seed, name => Rule(Shuffles[name]),
                               Rule(EntranceMode), Rule(SpiritMode), Rule(ElderPercent), Rule(GrantMode),
                               Rule(Scarce));
-            Patches.Install(harmony, Logger, plan, SkipIntro.Value);
+            Patches.Install(harmony, Logger, plan);
             Materials.Install(harmony, Logger, world, plan);
 
             // Realms, recipes and the reveal live on shared card assets, not

@@ -86,6 +86,8 @@ uncollected spoiles count.
 
 Everything on the in-game screen is also stored in
 `BepInEx/config/randomhowl.cfg`. These are the settings new games get.
+`skip_logos`, `skip_intro` and `auto_text` are under **SETTINGS > GAMEPLAY**
+instead.
 
 When a new game starts, whether it is randomized is saved to
 `profile_<N>.randomhowl.cfg` in the game's `saves_v_1_0` folder, next to that
@@ -99,8 +101,9 @@ save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
 | `spirits` | `Off` / `On` / `Restricted` | Shuffle spirits between fights. Environmental objects shuffle with each other. `Restricted` swaps elder spirits only with elder spirits, and plain spirits only with plain ones. With `elder_percent` set, it keeps elder spirits in elder spirit fights instead |
 | `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards. A reward card that nothing gives any more can be crafted instead, using the recipe of a card that took its place |
 | `elder_percent` | `-1` to `100` | Share of spirits that appear as elder spirits. With `spirits` set to `Restricted`, it only counts spirits in elder spirit fights. `-1` keeps the vanilla amount (about 23%) |
-| `totems` | true / false | Shuffle totem pickups |
-| `ingredients` | true / false | Shuffle ingredient pickups |
+| `totems` | true / false | Shuffle totems |
+| `ingredients` | true / false | Shuffle materials |
+| `nests` | true / false | Shuffles nests. Nest contents are shuffled by other shuffles |
 | `entrances` | `Off` / `On` / `Decoupled` | Shuffle where caves lead. `On` keeps caves in pairs, so walking back out of a cave puts you where you came in. `Decoupled` sends every cave mouth and exit somewhere random. |
 | `card_realms` | true / false | Shuffle which realm each card belongs to |
 | `recipes` | true / false | Shuffle which ingredients each card needs |
@@ -110,7 +113,7 @@ save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
 | `tear_health` | true / false | Enemies get 1% more health for each blood tear placed on the skill tree, up to 75% more |
 | `open_world` | true / false | Paths from forest are open from the start |
 | `skip_logos` | true / false | Skip the publisher logos |
-| `skip_intro` | true / false | Skip the opening cutscene |
+| `skip_intro` | true / false | Skip the opening cutscene, the tutorial scenes with Olvi and the stags, and the moose scenes at the waterfalls, each realm and the foot of the mountain. Walks in those scenes still happen, and blood tears still show their popup |
 | `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
 | `spoiler_log` | true / false | Write a spoiler log |
 
