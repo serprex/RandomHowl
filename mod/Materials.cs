@@ -101,9 +101,9 @@ namespace RandomHowl
             Guard("material rim", () =>
             {
                 // Crafting screens use the same slot. Only mark the materials grid.
-                if (!(Fields.Get(slot, "inCollectionGrid") as bool? ?? false)) return;
-                var data = Fields.Get(slot, "data") as UnityEngine.Object;
-                var rim = Fields.Get(slot, "rim") as Image;
+                if (!(Fields.Get<bool?>(slot, "inCollectionGrid") ?? false)) return;
+                var data = Fields.Get<UnityEngine.Object>(slot, "data");
+                var rim = Fields.Get<Image>(slot, "rim");
                 var guid = data == null ? null : Registry.GuidOf(data);
                 if (rim == null || guid == null || !here.Contains(guid)) return;
                 rim.enabled = true;
@@ -119,11 +119,11 @@ namespace RandomHowl
             var data = Patches.Manager("LiveGameDataManager");
             var items = Patches.Manager("GlobalWorldItemManager");
             var taken = items == null ? null
-                : Fields.Get(items, "removedSceneItems") as ICollection<string>;
+                : Fields.Get<ICollection<string>>(items, "removedSceneItems");
             var beaten = data == null ? null
-                : Fields.Get(data, "defeatedArenas") as ICollection<string>;
+                : Fields.Get<ICollection<string>>(data, "defeatedArenas");
             var closed = data == null ? null
-                : Fields.Get(data, "permanentlyDisabledArenas") as ICollection<string>;
+                : Fields.Get<ICollection<string>>(data, "permanentlyDisabledArenas");
 
             foreach (var slot in world.Ingredients)
             {
@@ -183,10 +183,10 @@ namespace RandomHowl
         {
             var scenes = new HashSet<string>();
             var loader = Patches.Manager("WorldLoadingSceneManager");
-            var root = loader == null ? null : Fields.Get(loader, "currentRegion") as Component;
+            var root = loader == null ? null : Fields.Get<Component>(loader, "currentRegion");
             if (root == null) return scenes;
             scenes.Add(root.gameObject.scene.name);
-            var zone = Fields.Get(root, "data") as UnityEngine.Object;
+            var zone = Fields.Get<UnityEngine.Object>(root, "data");
             if (zone == null) return scenes;
             foreach (var entry in Zones())
                 if (entry.Value == zone) scenes.Add(entry.Key);
@@ -199,7 +199,7 @@ namespace RandomHowl
             var type = AccessTools.TypeByName("RegionDataManager");
             var instance = type == null ? null : AccessTools.Property(type, "Instance");
             var manager = instance == null ? null : instance.GetValue(null, null);
-            var regions = manager == null ? null : Fields.Get(manager, "regions") as IList;
+            var regions = manager == null ? null : Fields.Get<IList>(manager, "regions");
             if (regions == null)
             {
                 log.LogWarning("no RegionDataManager.regions — only Ro's own scene "
@@ -217,11 +217,11 @@ namespace RandomHowl
                 if (zone == null) continue;
                 foreach (var list in new[] { "arenas", "waypoints", "treasures", "caves" })
                 {
-                    var entries = Fields.Get(zone, list) as IList;
+                    var entries = Fields.Get<IList>(zone, list);
                     if (entries == null) continue;
                     foreach (var entry in entries)
                     {
-                        var scene = entry == null ? null : Fields.Get(entry, "scene") as string;
+                        var scene = entry == null ? null : Fields.Get<string>(entry, "scene");
                         if (!string.IsNullOrEmpty(scene) && !found.ContainsKey(scene))
                             found[scene] = zone;
                     }

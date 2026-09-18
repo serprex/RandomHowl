@@ -40,6 +40,8 @@ namespace RandomHowl
         public ConfigEntry<bool> SkipLogos;
         public ConfigEntry<bool> SkipIntro;
         public ConfigEntry<bool> AutoText;
+        public ConfigEntry<bool> Cheats;
+        public ConfigEntry<bool> FasterRo;
         public ConfigEntry<bool> SpoilerLog;
 
         /// False until the world scan finishes; the screen waits on it.
@@ -135,6 +137,10 @@ namespace RandomHowl
                 "skip opening cutscenes");
             AutoText = Config.Bind("extras", "auto_text", false,
                 "dialogue boxes instantly flash by.");
+            Cheats = Config.Bind("extras", "enable_cheats", false,
+                "turn on the game's debug cheat keys in saves that aren't randomized");
+            FasterRo = Config.Bind("extras", "faster_ro", false,
+                "Ro moves twice as fast");
             SpoilerLog = Config.Bind("extras", "spoiler_log", true,
                 "write spoiler-<seed>.txt next to this plugin");
 
@@ -317,7 +323,7 @@ namespace RandomHowl
             var type = AccessTools.TypeByName("TitleMenu");
             var settings = type == null ? null
                 : AccessTools.Field(type, "lastSelcetedModeSettings")?.GetValue(null);
-            return settings != null && Fields.Get(settings, "mode") as int? == 2;
+            return settings != null && Fields.Get<int?>(settings, "mode") == 2;
         }
 
         /// Go back to the menu's settings.
@@ -350,7 +356,7 @@ namespace RandomHowl
             if (slot == null)
             {
                 var settings = AccessTools.Method(type, "GetSettings")?.Invoke(null, null);
-                slot = settings == null ? null : Fields.Get(settings, "chosenProfile") as int?;
+                slot = settings == null ? null : Fields.Get<int?>(settings, "chosenProfile");
                 if (slot == null) return null;
             }
             return Path.Combine(folder, "profile_" + slot.Value);

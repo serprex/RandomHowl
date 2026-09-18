@@ -66,6 +66,13 @@ namespace RandomHowl
                  nameof(TearHowlCost), getter: true);
             Hook(harmony, "CombatArena", "InstantiateEnemy", nameof(EnemySpawned), true);
 
+            // Base game bug: auto end turn can fire while a spirit is still
+            // dying, before its card or mana arrives.
+            Hook(harmony, "Character", "Die", nameof(DeathStarted), true);
+            Hook(harmony, "CombatArena", "OnCombatStarted", nameof(DeathsCleared));
+            Hook(harmony, "PlayerCombatController", "AnyLeagalPlayerActions",
+                 nameof(WaitForDeaths));
+
             // Two pickups in different scenes share a UUID, so taking one hid
             // both. Give each its own id before the scan or save reads it.
             Hook(harmony, "UUIDAuto", "ID", nameof(IdRead), true, getter: true);
@@ -93,6 +100,18 @@ namespace RandomHowl
             // other gameplay setting, whatever save is loaded.
             Hook(harmony, "CutSceneSequence", "Show", nameof(CutsceneStarted));
             Hook(harmony, "ScriptableEventArea", "DoHandleMidPartOfEventFlow", nameof(QuickScene));
+            Hook(harmony, "TutorialWoundedMooseEvent", "DoHandleMidPartOfEventFlow",
+                 nameof(QuickMoose), true);
+            Hook(harmony, "RespawnPopup", "RespawnEnemiesAndHealPlayer", nameof(GroveHeal));
+            Hook(harmony, "TutorialMapEvent", "DoHandleMidPartOfEventFlow", nameof(QuietMap));
+
+            // Reads the config as it fires, so the menu toggle works mid-run.
+            Hook(harmony, "CheatShortCuts", "MayCheat", nameof(MayCheat), true);
+            Hook(harmony, "TweenExtension", "MovementTween", nameof(RoMoving));
+            Hook(harmony, "ExplorationCamera", "LateUpdate", nameof(CameraMoving));
+            Hook(harmony, "ExplorationCamera", "LateUpdate", nameof(CameraMoved), true);
+            Hook(harmony, "DynamicWorldShadowHandler", "LateUpdate", nameof(ShadowMoving));
+            Hook(harmony, "DynamicWorldShadowHandler", "LateUpdate", nameof(ShadowMoved), true);
 
             var type = AccessTools.TypeByName("LogoIntroHandler");
             skipLogos = type == null ? null
@@ -185,8 +204,8 @@ namespace RandomHowl
                 if (data == null) { Missing("item", guid); return; }
                 Fields.Set(__instance, "data", data);
                 // Show the new item's sprite too.
-                var renderer = Fields.Get(__instance, "spriteRenderer") as SpriteRenderer;
-                var sprite = Fields.Get(data, "IllustrationWorld") as Sprite;
+                var renderer = Fields.Get<SpriteRenderer>(__instance, "spriteRenderer");
+                var sprite = Fields.Get<Sprite>(data, "IllustrationWorld");
                 if (renderer != null && sprite != null) renderer.sprite = sprite;
             });
         }
@@ -198,7 +217,7 @@ namespace RandomHowl
                 var arena = (Component)__instance;
                 string[] wanted;
                 if (!plan.Spirits.TryGetValue(Keys.Uuid(arena), out wanted)) return;
-                var prefabs = Fields.Get(__instance, "enemyPrefabs") as IList;
+                var prefabs = Fields.Get<IList>(__instance, "enemyPrefabs");
                 if (prefabs == null) return;
                 for (var i = 0; i < wanted.Length && i < prefabs.Count; i++)
                 {
@@ -245,7 +264,7 @@ namespace RandomHowl
                 if (!DeathExits.TryGetValue(scene, out path)
                     || !plan.Entrances.TryGetValue(Plan.Key(scene, path), out exit)) return;
                 var death = Fields.Get(__instance, "spawnPointInAnotherScene");
-                if (death == null || !(Fields.Get(death, "isSet") as bool? ?? false)) return;
+                if (death == null || !(Fields.Get<bool?>(death, "isSet") ?? false)) return;
                 // death is a boxed copy, so write it back after changing it.
                 Fields.Set(death, "value", exit.Spawn);
                 Fields.Set(__instance, "spawnPointInAnotherScene", death);
@@ -291,7 +310,7 @@ namespace RandomHowl
         {
             Guard("mini-boss totems", () =>
             {
-                var list = Fields.Get(__instance, "miniBossTotems") as IList;
+                var list = Fields.Get<IList>(__instance, "miniBossTotems");
                 if (list == null) return;
                 foreach (var entry in list)
                 {
@@ -299,7 +318,7 @@ namespace RandomHowl
                     string vanilla;
                     if (!miniBossVanilla.TryGetValue(flag, out vanilla))
                     {
-                        var data = Fields.Get(entry, "data") as UnityEngine.Object;
+                        var data = Fields.Get<UnityEngine.Object>(entry, "data");
                         miniBossVanilla[flag] = vanilla = data == null ? null : Registry.GuidOf(data);
                     }
                     if (vanilla == null) continue;
@@ -318,10 +337,10 @@ namespace RandomHowl
         {
             Guard("nest", () =>
             {
-                if (Fields.Get(__instance, "treasureHasBeenRemoved") as bool? ?? true) return;
+                if (Fields.Get<bool?>(__instance, "treasureHasBeenRemoved") ?? true) return;
                 var nest = (Component)__instance;
                 var uuid = Registry.Uuid(nest.gameObject);
-                var items = Fields.Get(__instance, "treasures") as IList;
+                var items = Fields.Get<IList>(__instance, "treasures");
                 Nest wanted;
                 if (uuid == null || items == null
                     || !plan.Nests.TryGetValue(Plan.Key(nest.gameObject.scene.name, uuid), out wanted))
@@ -380,9 +399,9 @@ namespace RandomHowl
         public static void CardCraftable(object __instance, ref bool __result)
         {
             if (__result || plan.Crafted.Count == 0) return;
-            var guid = Fields.Get(__instance, "uniqueIdentifier") as string;
+            var guid = Fields.Get<string>(__instance, "uniqueIdentifier");
             if (guid == null || !plan.Crafted.Contains(guid)) return;
-            __result = Fields.Property(__instance, "IsCorrectMode") as bool? ?? false;
+            __result = Fields.Property<bool?>(__instance, "IsCorrectMode") ?? false;
         }
 
         /// Card realms live on the card assets, so they are set once, when the
@@ -431,7 +450,7 @@ namespace RandomHowl
                     var guid = Registry.GuidOf(card);
                     Ingredient[] wanted;
                     if (guid == null || !plan.Recipes.TryGetValue(guid, out wanted)) continue;
-                    var recipe = Fields.Get(card, "recipe") as IList;
+                    var recipe = Fields.Get<IList>(card, "recipe");
                     if (recipe == null) continue;
                     var lineType = recipe.GetType().GetGenericArguments()[0];
                     for (var i = 0; i < wanted.Length; i++)
@@ -511,7 +530,7 @@ namespace RandomHowl
             if (!Plugin.Rule(Plugin.Instance.Scarce)) return;
             Guard("loot drop", () =>
             {
-                var loot = Fields.Get(__instance, "loot") as IList;
+                var loot = Fields.Get<IList>(__instance, "loot");
                 var area = arena as Component;
                 if (loot == null || area == null) return;
                 var id = Registry.Uuid(area.gameObject);
@@ -577,7 +596,7 @@ namespace RandomHowl
                 foreach (var found in UnityEngine.Object.FindObjectsOfType(itemType))
                 {
                     var item = found as Behaviour;
-                    if (item == null || Fields.Get(item, "spawnerID") as string != id) continue;
+                    if (item == null || Fields.Get<string>(item, "spawnerID") != id) continue;
                     var what = Fields.Get(item, "data");
                     if (!ingredientType.IsInstanceOfType(what)) continue;
                     add.Invoke(data, new[] { what, 1 });
@@ -610,7 +629,7 @@ namespace RandomHowl
                 lastArena = id;
                 var data = Manager("LiveGameDataManager");
                 var defeated = data == null ? null
-                    : Fields.Get(data, "defeatedArenas") as ICollection<string>;
+                    : Fields.Get<ICollection<string>>(data, "defeatedArenas");
                 if (defeated == null) return;
                 if (defeated.Contains(id)) refights.Add(id);
                 else refights.Remove(id);
@@ -623,7 +642,7 @@ namespace RandomHowl
             // fight ends, so fall back to the one just started.
             var combat = Manager("CombatEntityManager");
             var arena = combat == null ? null
-                : Fields.Get(combat, "currentArena") as Component;
+                : Fields.Get<Component>(combat, "currentArena");
             var id = arena == null ? lastArena : Registry.Uuid(arena.gameObject);
             return id != null && refights.Contains(id);
         }
@@ -640,7 +659,7 @@ namespace RandomHowl
             var data = Manager("LiveGameDataManager");
             var player = Manager("Player");
             var kept = player == null ? 0
-                : Fields.Get(player, "soulBeforeCombat") as int? ?? 0;
+                : Fields.Get<int?>(player, "soulBeforeCombat") ?? 0;
             if (data == null || kept <= 0) return true;
             keepingHowls = true;
             Plugin.Instance.StartCoroutine(GiveHowlsBack(data, kept));
@@ -661,6 +680,44 @@ namespace RandomHowl
             return !keepingHowls;
         }
 
+        // --- auto end turn ---------------------------------------------------
+
+        static int dying;
+        static int deathRound;
+
+        /// Die runs the death on its own coroutine, so the card that killed
+        /// the spirit can finish first. The spirit card and drained mana come
+        /// at the end of that coroutine. Count deaths until they finish.
+        public static void DeathStarted(Coroutine __result)
+        {
+            if (__result == null) return;
+            dying++;
+            Plugin.Instance.StartCoroutine(DeathDone(__result, deathRound));
+        }
+
+        static IEnumerator DeathDone(Coroutine death, int round)
+        {
+            yield return death;
+            if (round == deathRound && dying > 0) dying--;
+        }
+
+        /// A fight can end with a death coroutine cut off, so start each fight
+        /// at zero and ignore the old ones.
+        public static void DeathsCleared()
+        {
+            dying = 0;
+            deathRound++;
+        }
+
+        /// Auto end turn only ends it when this is false, so say there's
+        /// still something to do while a spirit is dying.
+        public static bool WaitForDeaths(ref bool __result)
+        {
+            if (dying == 0) return true;
+            __result = true;
+            return false;
+        }
+
         // --- difficulty ------------------------------------------------------
 
         const int MaxTearHealth = 75;
@@ -678,13 +735,13 @@ namespace RandomHowl
             if (playerAlly || __result == null || !Plugin.Rule(Plugin.Instance.TearHealth)) return;
             Guard("tear health", () =>
             {
-                if (Fields.Property(__result, "IsSpecialTile") as bool? ?? true) return;
+                if (Fields.Property<bool?>(__result, "IsSpecialTile") ?? true) return;
                 var extra = TearsPlaced();
                 var stats = Fields.Get(__result, "stats");
                 if (extra <= 0 || stats == null) return;
                 foreach (var field in new[] { "health", "maxHealth" })
                 {
-                    var health = Fields.Get(stats, field) as int?;
+                    var health = Fields.Get<int?>(stats, field);
                     if (health == null) continue;
                     Fields.Set(stats, field,
                                Mathf.Max(1, Mathf.RoundToInt(health.Value * (100f + extra) / 100f)));
@@ -696,11 +753,11 @@ namespace RandomHowl
         static int TearsPlaced()
         {
             var data = Manager("LiveGameDataManager");
-            var slots = data == null ? null : Fields.Get(data, "skillSlotinfo") as IEnumerable;
+            var slots = data == null ? null : Fields.Get<IEnumerable>(data, "skillSlotinfo");
             if (slots == null) return 0;
             var placed = 0;
             foreach (var slot in slots)
-                if (slot != null) placed += Fields.Get(slot, "progression") as int? ?? 0;
+                if (slot != null) placed += Fields.Get<int?>(slot, "progression") ?? 0;
             return Math.Min(placed, MaxTearHealth);
         }
 
@@ -753,20 +810,20 @@ namespace RandomHowl
                 var known = Fields.Get(data, "unlockedCardBluePrints");
                 var ingredients = Fields.Get(data, "knownIngredients");
                 var all = Fields.Get(data, "allCards");
-                var cards = all == null ? null : Fields.Get(all, "list") as IEnumerable;
+                var cards = all == null ? null : Fields.Get<IEnumerable>(all, "list");
                 if (known == null || cards == null) return;
 
                 var shown = 0;
                 foreach (var card in cards)
                 {
                     if (card == null) continue;
-                    var type = Fields.Get(card, "type") as UnityEngine.Object;
+                    var type = Fields.Get<UnityEngine.Object>(card, "type");
                     if (type == null || !Discovery.IsRealm(type)) continue;
-                    if (!(Fields.Property(card, "allowUnlockByCrafting") as bool? ?? false))
+                    if (!(Fields.Property<bool?>(card, "allowUnlockByCrafting") ?? false))
                         continue;
                     var info = Fields.Get(type, "persistantInfo");
                     if (info != null) Fields.Set(info, "cardsAreUnlocked", true);
-                    if (!(Call(known, "TryAdd", card) as bool? ?? false)) continue;
+                    if (!(Call<bool?>(known, "TryAdd", card) ?? false)) continue;
                     shown++;
                     Learn(ingredients, card);
                 }
@@ -778,7 +835,7 @@ namespace RandomHowl
         /// when the game reveals one itself.
         static void Learn(object ingredients, object card)
         {
-            var recipe = Fields.Get(card, "recipe") as IList;
+            var recipe = Fields.Get<IList>(card, "recipe");
             if (ingredients == null || recipe == null) return;
             foreach (var item in recipe)
             {
@@ -797,6 +854,98 @@ namespace RandomHowl
         {
             var method = AccessTools.Method(target.GetType(), name, Type.EmptyTypes);
             return method == null ? null : method.Invoke(target, null);
+        }
+
+        static T Call<T>(object target, string name, object argument) =>
+            Fields.As<T>(Call(target, name, argument));
+
+        static T Call<T>(object target, string name) => Fields.As<T>(Call(target, name));
+
+        /// The game's cheat keys, only for saves that aren't randomized.
+        public static void MayCheat(ref bool __result)
+        {
+            if (Plugin.Instance.Cheats.Value && !Plugin.Randomized) __result = true;
+        }
+
+        const float RoSpeedUp = 2f;
+
+        /// Faster Ro: her walks take half the time.
+        public static void RoMoving(Component character, ref float duration)
+        {
+            if (Plugin.Instance.FasterRo.Value && character != null
+                && character.GetType().Name == "Player")
+                duration /= RoSpeedUp;
+        }
+
+        /// Camera settings and shadow handler sped up for this frame, put back afterwards.
+        /// Camera settings are shared game assets, so can't be left in place.
+        static object spedUpCamera, spedUpShadow;
+        static readonly string[] CameraSpeeds = { "maxSpeed", "acceleration" };
+        static readonly string[] ShadowSpeeds = { "currentShadowSpeed" };
+        static MethodInfo getPlayer;
+
+        /// Each camera area caps how fast the camera moves, often below Ro's
+        /// normal walk. With Faster Ro, raise the cap while she walks so the
+        /// camera keeps up. Scripted pans, where she stands still, stay slow.
+        public static void CameraMoving(object __instance)
+        {
+            SpeedUp(ref spedUpCamera, __instance, "CurrentParams", CameraSpeeds);
+        }
+
+        public static void CameraMoved()
+        {
+            SlowDown(ref spedUpCamera, CameraSpeeds);
+        }
+
+        /// The dark edge around the screen trails the camera on its own slow
+        /// timer. With Faster Ro, speed that up too while she walks.
+        public static void ShadowMoving(object __instance)
+        {
+            SpeedUp(ref spedUpShadow, __instance, null, ShadowSpeeds);
+        }
+
+        public static void ShadowMoved()
+        {
+            SlowDown(ref spedUpShadow, ShadowSpeeds);
+        }
+
+        /// Scales up the named speeds while Ro walks fast. They're on the
+        /// instance itself, or on one of its properties when one is named.
+        static void SpeedUp(ref object held, object instance, string property, string[] speeds)
+        {
+            // Put back anything a crashed frame left sped up.
+            SlowDown(ref held, speeds);
+            if (!RoWalkingFast()) return;
+            var target = property == null ? instance : Fields.Property(instance, property);
+            if (target == null) return;
+            Scale(target, RoSpeedUp, speeds);
+            held = target;
+        }
+
+        static void SlowDown(ref object held, string[] speeds)
+        {
+            if (held == null) return;
+            Scale(held, 1f / RoSpeedUp, speeds);
+            held = null;
+        }
+
+        static void Scale(object target, float factor, string[] speeds)
+        {
+            foreach (var name in speeds)
+            {
+                var value = Fields.Get(target, name);
+                if (value is float) Fields.Set(target, name, (float)value * factor);
+            }
+        }
+
+        /// True when Faster Ro is on and she's walking right now.
+        static bool RoWalkingFast()
+        {
+            if (!Plugin.Instance.FasterRo.Value) return false;
+            if (getPlayer == null)
+                getPlayer = AccessTools.Method(AccessTools.TypeByName("Player"), "Get");
+            var player = getPlayer == null ? null : getPlayer.Invoke(null, null);
+            return player != null && true.Equals(Fields.Property(player, "IsMoving"));
         }
 
         /// Presses the game's own Esc handler on the first frame. Setting
@@ -820,7 +969,7 @@ namespace RandomHowl
             {
                 if (!IsIntro(__instance)) return;
                 Fields.Set(__instance, "shaderTweenInDurationFirstFrame", 0f);
-                var frames = Fields.Get(__instance, "frames") as IEnumerable;
+                var frames = Fields.Get<IEnumerable>(__instance, "frames");
                 if (frames == null) return;
                 foreach (var frame in frames)
                 {
@@ -864,13 +1013,183 @@ namespace RandomHowl
                 var area = ((Component)__instance).gameObject;
                 HashSet<string> names;
                 if (!QuickScenes.TryGetValue(area.scene.name, out names) || !names.Contains(area.name)) return;
-                var flow = Fields.Get(__instance, "eventFlow") as IList;
+                var flow = Fields.Get<IList>(__instance, "eventFlow");
                 if (flow != null) quick = PlayAtOnce(flow);
             });
             if (quick == null) return true;
             __result = quick;
             return false;
         }
+
+        /// With intro skipped the moose event plays as normal until Ro heals
+        /// at the sacred grove. Once she spends her souls there, the moose
+        /// and its flies are simply gone and Ro moves on.
+        public static void QuickMoose(object __instance, ref IEnumerator __result)
+        {
+            if (!Plugin.Instance.SkipIntro.Value || __result == null) return;
+            __result = StopAtHeal(__instance, __result);
+        }
+
+        /// The grove popup that last started a heal. The popup is hidden
+        /// most of the time, so it can't be looked up ahead of time.
+        static object healingPopup;
+
+        public static void GroveHeal(object __instance)
+        {
+            healingPopup = __instance;
+        }
+
+        /// Runs the game's event until Ro heals at the grove.
+        static IEnumerator StopAtHeal(object area, IEnumerator flow)
+        {
+            healingPopup = null;
+            while (flow.MoveNext())
+            {
+                if (healingPopup != null) break;
+                yield return flow.Current;
+            }
+            var popup = healingPopup;
+            healingPopup = null;
+            if (popup == null) yield break;
+            Guard("dead moose", () =>
+            {
+                var moose = Fields.Get<Component>(area, "moose");
+                if (moose != null) moose.gameObject.SetActive(false);
+                var flies = Fields.Get<GameObject>(area, "flies");
+                if (flies != null) flies.SetActive(false);
+            });
+            // Let the heal play out before leaving the forest.
+            while (Healing(popup)) yield return null;
+            yield return MooseGone(area);
+        }
+
+        static bool Healing(object popup)
+        {
+            return true.Equals(Fields.Get(popup, "isDoingHealingFlow"));
+        }
+
+        static IEnumerator MooseGone(object area)
+        {
+            Guard("dead moose", () =>
+            {
+                foreach (var name in new[] { "afterHealingDialougue", "afterHealingDialouguePart2" })
+                {
+                    var line = Fields.Get(area, name);
+                    if (line != null) Call(line, "MarkAsSeenByPlayer");
+                }
+                foreach (var guide in Fields.Get<IEnumerable>(area, "cameraGuidesToDisableAfterEvent")
+                                     ?? new object[0])
+                    if (guide is Behaviour) ((Behaviour)guide).enabled = false;
+                // The map tip, which the event waits on, unlocked the map.
+                var data = Manager("LiveGameDataManager");
+                if (data != null) Fields.Set(data, "mapUnlocked", true);
+                // The event ends with no music playing.
+                var music = Manager("MusicHandler");
+                if (music != null) Defaults(music, "PlayTrack", new object[] { null });
+                var shadows = Manager("DynamicWorldShadowHandler");
+                if (shadows != null) Fields.Set(shadows, "snap", false);
+            });
+
+            var scenes = Manager("WorldLoadingSceneManager");
+            if (scenes == null) yield break;
+            IEnumerator step = null;
+            Guard("dead moose", () => step = Defaults<IEnumerator>(scenes, "DoLoadScene", "DarkForest"));
+            if (step != null) yield return step;
+            step = null;
+            Guard("dead moose", () =>
+            {
+                var region = Call(scenes, "GetRegionByName", "DarkForest");
+                if (region != null) Call(region, "SetAsCurrentRegion");
+                // The event blocked input for the heal and lets go here.
+                var input = Manager("InputManager");
+                var block = input == null ? null
+                    : AccessTools.Method(input.GetType(), "SetBlocker", new[] { typeof(bool), typeof(bool) });
+                if (block != null) block.Invoke(input, new object[] { false, false });
+                step = Defaults<IEnumerator>(scenes, "DoUnloadScene", "TutorialForest", false);
+            });
+            if (step != null) yield return step;
+        }
+
+        /// With intro skipped the Dark Forest doesn't open the map to show
+        /// itself off. Saving and fast travel still unlock, and the forest's
+        /// map counts as seen.
+        public static bool QuietMap(object __instance, ref IEnumerator __result)
+        {
+            if (!Plugin.Instance.SkipIntro.Value) return true;
+            __result = MapSeen(__instance);
+            return false;
+        }
+
+        static IEnumerator MapSeen(object area)
+        {
+            Guard("map tutorial", () =>
+            {
+                var data = Manager("LiveGameDataManager");
+                if (data == null) return;
+                var picked = Fields.Get<IList>(data, "ingredientCollection");
+                if (picked != null && picked.Count == 1) picked.Clear();
+
+                var scenes = Manager("WorldLoadingSceneManager");
+                var grove = Fields.Get(area, "firstCheckPoint");
+                var id = grove == null ? null : Fields.Property<string>(grove, "ID");
+                // The spawn info is a struct, so change a copy and put it back.
+                var spawn = scenes == null ? null : Fields.Get(scenes, "playerSpawnInfo");
+                if (spawn != null && id != null)
+                {
+                    Fields.Set(spawn, "lastSavePointID", id);
+                    Fields.Set(spawn, "lastSacredPlaceID", id);
+                    Fields.Set(scenes, "playerSpawnInfo", spawn);
+                }
+
+                // What opening the map would mark: the forest's grove is found.
+                var region = scenes == null ? null : Fields.Get(scenes, "currentRegion");
+                var regionData = region == null ? null : Fields.Get(region, "data");
+                var name = regionData == null ? null : Fields.Get<string>(regionData, "regionSystemName");
+                var regions = Fields.Get<IList>(data, "unlockedRegions");
+                if (name != null && regions != null)
+                {
+                    object info = null;
+                    foreach (var r in regions)
+                        if (name.Equals(Fields.Get(r, "regionID"))) info = r;
+                    if (info == null)
+                    {
+                        info = Activator.CreateInstance(AccessTools.TypeByName("RegionInfo"));
+                        Fields.Set(info, "regionID", name);
+                        regions.Add(info);
+                    }
+                    Fields.Set(info, "hasFoundSacredGrove", true);
+                }
+
+                Fields.Set(data, "savingUnlocked", true);
+                Fields.Set(data, "fastTravelUnlocked", true);
+            });
+            yield break;
+        }
+
+        /// Calls a method the way the game calls it, giving the first
+        /// arguments and letting the rest be their defaults.
+        static object Defaults(object target, string name, params object[] given)
+        {
+            var method = AccessTools.Method(target.GetType(), name);
+            if (method == null) return null;
+            var wanted = method.GetParameters();
+            var args = new object[wanted.Length];
+            for (var i = 0; i < wanted.Length; i++)
+            {
+                if (i < given.Length) { args[i] = given[i]; continue; }
+                var value = wanted[i].DefaultValue;
+                // A struct default is stored as nothing at all, so build one.
+                args[i] = value == null || value == DBNull.Value
+                          || value == System.Reflection.Missing.Value
+                    ? (wanted[i].ParameterType.IsValueType
+                       ? Activator.CreateInstance(wanted[i].ParameterType) : null)
+                    : value;
+            }
+            return method.Invoke(target, args);
+        }
+
+        static T Defaults<T>(object target, string name, params object[] given) =>
+            Fields.As<T>(Defaults(target, name, given));
 
         /// Steps that don't need a fade to finish first, since they only fade
         /// too or show nothing.
@@ -922,7 +1241,7 @@ namespace RandomHowl
                 case "EventComponentOverHeadText":
                     return null;
                 case "EventComponentTweenMaterialProperty":
-                    fade = Fields.Get(step, "duration") as float? ?? 0f;
+                    fade = Fields.Get<float?>(step, "duration") ?? 0f;
                     break;
                 case "EventComponentDeerAppear":
                 case "EventComponentDeerDisappear":
@@ -933,10 +1252,10 @@ namespace RandomHowl
                     Fields.Set(step, "duration", 0f);
                     break;
                 case "EventComponentPlayAnimationSequence":
-                    (Fields.Get(step, "tempAnimations") as IList)?.Clear();
+                    Fields.Get<IList>(step, "tempAnimations")?.Clear();
                     break;
                 case "EventComponentFlickerAntlers":
-                    (Fields.Get(step, "cyclesTiming") as IList)?.Clear();
+                    Fields.Get<IList>(step, "cyclesTiming")?.Clear();
                     break;
                 case "EventComponentWalkTo":
                 case "EventComponentWalkDeer":
@@ -944,7 +1263,7 @@ namespace RandomHowl
                     break;
                 case "EventComponentPlayAnimation":
                     // Plays on its own while the scene goes on
-                    StartOnManager(Call(step, "DoRun") as IEnumerator);
+                    StartOnManager(Call<IEnumerator>(step, "DoRun"));
                     return null;
                 case "EventComponentPresentGreatSpiritsMuralPanel":
                     return null;
@@ -958,9 +1277,9 @@ namespace RandomHowl
                         Fields.Set(step, timing, 0f);
                     break;
             }
-            var run = Call(step, "DoRun") as IEnumerator;
+            var run = Call<IEnumerator>(step, "DoRun");
             if (run == null) return null;
-            if (walk || (Call(step, "WaitUntilCompleted") as bool? ?? false))
+            if (walk || (Call<bool?>(step, "WaitUntilCompleted") ?? false))
             {
                 fade = 0f;
                 return run;
@@ -982,14 +1301,14 @@ namespace RandomHowl
             foreach (var pick in new[] { "dialogueList", "dialoguePack" })
             {
                 var optional = Fields.Get(step, pick);
-                if (optional == null || !(Fields.Get(optional, "isSet") as bool? ?? false)) continue;
+                if (optional == null || !(Fields.Get<bool?>(optional, "isSet") ?? false)) continue;
                 var value = Fields.Get(optional, "value");
                 if (value == null) continue;
                 var lines = pick == "dialogueList" ? value : Fields.Get(value, "dialogues");
                 if (!(lines is IEnumerable)) continue;
                 foreach (var each in (IEnumerable)lines)
                 {
-                    if (each == null || (Call(each, "IsSeenByPlayer") as bool? ?? true)) continue;
+                    if (each == null || (Call<bool?>(each, "IsSeenByPlayer") ?? true)) continue;
                     line = each;
                     break;
                 }
@@ -1014,9 +1333,10 @@ namespace RandomHowl
         static int fakeFrame;
 
         /// The tutorial's first event hides every tab when its scene loads,
-        /// including when a save made there is loaded. Saving is left alone,
-        /// since early events act differently while it's off. Games that aren't
-        /// randomized keep the tutorial.
+        /// including when a save made there is loaded. Games that aren't
+        /// randomized keep the tutorial. Saving stays off until the Dark
+        /// Forest map event (or QuietMap). While it's on, finding a grove
+        /// opens the map, and the tutorial grove heal plays as a normal one.
         public static void UnlockMenus()
         {
             if (!Plugin.Randomized) return;
@@ -1117,14 +1437,14 @@ namespace RandomHowl
             var line = Fields.Get(dialogue, "currentContent");
             if (line == null) return;
             var data = Manager("LiveGameDataManager");
-            if (data != null && (Fields.Get(data, "gamePaused") as bool? ?? false)) return;
+            if (data != null && (Fields.Get<bool?>(data, "gamePaused") ?? false)) return;
 
             if (line != shownLine)
             {
                 shownLine = line;
                 shownAt = Time.time;
             }
-            var panel = Fields.Get(dialogue, "visualPanel") as Component;
+            var panel = Fields.Get<Component>(dialogue, "visualPanel");
             if ((panel != null && panel.gameObject.activeInHierarchy)
                 || Time.time - shownAt >= 2f)
                 __result = true;

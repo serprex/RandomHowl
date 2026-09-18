@@ -113,8 +113,8 @@ namespace RandomHowl
             {
                 if (node == null) continue;
                 var slot = Slot.Of(Keys.NodeScene, Keys.NodeKey(node), null);
-                var card = Fields.Get(node, "card") as UnityEngine.Object;
-                var totem = card == null ? Fields.Get(node, "totem") as UnityEngine.Object
+                var card = Fields.Get<UnityEngine.Object>(node, "card");
+                var totem = card == null ? Fields.Get<UnityEngine.Object>(node, "totem")
                     : null;
                 if (card != null)
                 {
@@ -140,7 +140,7 @@ namespace RandomHowl
                 IEnumerable<UnityEngine.Object> spare)
         {
             var found = new List<UnityEngine.Object>();
-            var list = manager == null ? null : Fields.Get(manager, field) as IEnumerable;
+            var list = manager == null ? null : Fields.Get<IEnumerable>(manager, field);
             if (list != null)
                 foreach (var entry in list)
                 {
@@ -178,7 +178,7 @@ namespace RandomHowl
             foreach (var card in cards)
             {
                 var guid = Registry.GuidOf(card);
-                var type = Fields.Get(card, "type") as UnityEngine.Object;
+                var type = Fields.Get<UnityEngine.Object>(card, "type");
                 if (guid == null || type == null) continue;
                 // Mode 2 is the alternate card set's own version of a card.
                 if (Number(Fields.Get(card, "mode")) == 2) world.PlusOnly.Add(guid);
@@ -209,12 +209,12 @@ namespace RandomHowl
         /// crafts them.
         static void CollectRecipe(World world, UnityEngine.Object card, string guid)
         {
-            var recipe = Fields.Get(card, "recipe") as IList;
+            var recipe = Fields.Get<IList>(card, "recipe");
             if (recipe == null) return;
             for (var i = 0; i < recipe.Count; i++)
             {
                 var data = recipe[i] == null ? null
-                    : Fields.Get(recipe[i], "data") as UnityEngine.Object;
+                    : Fields.Get<UnityEngine.Object>(recipe[i], "data");
                 if (data == null) continue;
                 var item = Registry.GuidOf(data);
                 if (item == null) continue;
@@ -230,11 +230,11 @@ namespace RandomHowl
         static Ingredient[] Recipe(UnityEngine.Object card)
         {
             var found = new List<Ingredient>();
-            var recipe = Fields.Get(card, "recipe") as IList;
+            var recipe = Fields.Get<IList>(card, "recipe");
             if (recipe == null) return found.ToArray();
             foreach (var line in recipe)
             {
-                var data = line == null ? null : Fields.Get(line, "data") as UnityEngine.Object;
+                var data = line == null ? null : Fields.Get<UnityEngine.Object>(line, "data");
                 var item = data == null ? null : Registry.GuidOf(data);
                 if (item == null) continue;
                 found.Add(new Ingredient { Item = item, Amount = Number(Fields.Get(line, "quantity")) });
@@ -260,7 +260,7 @@ namespace RandomHowl
         /// A card type that gates a card behind a region, not a special pile.
         internal static bool IsRealm(UnityEngine.Object type)
         {
-            return (Fields.Get(type, "index") as int?) >= 0
+            return Fields.Get<int?>(type, "index") >= 0
                    && !Flag(type, "isDev") && !Flag(type, "isBasic")
                    && !Flag(type, "isSpiritCard") && !Flag(type, "isCurse")
                    && !Flag(type, "isKeyItemType") && !Flag(type, "isSpecialTileRewardType");
@@ -271,14 +271,14 @@ namespace RandomHowl
         /// flag.
         static bool IsRealmless(UnityEngine.Object type)
         {
-            return (Fields.Get(type, "index") as int?) == 0
+            return Fields.Get<int?>(type, "index") == 0
                    && Flag(type, "isBasic") && !Flag(type, "isDev")
                    && !Flag(type, "isSpecialTileRewardType");
         }
 
         static bool Flag(object obj, string name)
         {
-            return Fields.Get(obj, name) as bool? ?? false;
+            return Fields.Get<bool?>(obj, name) ?? false;
         }
 
         // --- level discovery ----------------------------------------------
@@ -408,7 +408,7 @@ namespace RandomHowl
         // the same across runs.
         static void ScanIngredient(Component comp, string scene, World world)
         {
-            var data = Fields.Get(comp, "data") as UnityEngine.Object;
+            var data = Fields.Get<UnityEngine.Object>(comp, "data");
             // Some pickups hand over a card for an event, like Scale Shield.
             // Only ingredients and totems move.
             var totem = TotemType != null && TotemType.IsInstanceOfType(data);
@@ -421,7 +421,7 @@ namespace RandomHowl
 
         static void ScanTotem(Component comp, string scene, World world)
         {
-            var data = Fields.Get(comp, "data") as UnityEngine.Object;
+            var data = Fields.Get<UnityEngine.Object>(comp, "data");
             var guid = data == null ? null : Registry.GuidOf(data);
             var uuid = Registry.Uuid(comp.gameObject) ?? Keys.Path(comp.transform);
             if (uuid == null || guid == null) return;
@@ -435,7 +435,7 @@ namespace RandomHowl
         {
             var uuid = Registry.Uuid(comp.gameObject);
             if (uuid == null) return;
-            var items = Fields.Get(comp, "treasures") as IList;
+            var items = Fields.Get<IList>(comp, "treasures");
             var nest = new Nest
             {
                 Scene = scene, Key = uuid, Tears = Number(Fields.Get(comp, "skillPoints")),
@@ -473,7 +473,7 @@ namespace RandomHowl
 
         static void ScanReward(Component comp, string scene, World world, string field)
         {
-            var data = Fields.Get(comp, field) as UnityEngine.Object;
+            var data = Fields.Get<UnityEngine.Object>(comp, field);
             var guid = data == null ? null : Registry.GuidOf(data);
             if (guid == null) return;
             world.Totems.Add(Slot.Of(scene, Keys.EventKey(comp), guid));
@@ -484,7 +484,7 @@ namespace RandomHowl
         /// Plan.BuildGrants.
         static void ScanGrant(Component comp, string scene, World world)
         {
-            var data = Fields.Get(comp, "data") as UnityEngine.Object;
+            var data = Fields.Get<UnityEngine.Object>(comp, "data");
             var guid = data == null ? null : Registry.GuidOf(data);
             var uuid = Registry.Uuid(comp.gameObject) ?? Keys.Path(comp.transform);
             if (uuid == null || guid == null) return;
@@ -493,8 +493,8 @@ namespace RandomHowl
 
         static void ScanEntrance(Component comp, string scene, World world)
         {
-            var area = Fields.Get(comp, "exitAreaData") as UnityEngine.Object;
-            var spawn = Fields.Get(comp, "targetSpawnPointID") as string;
+            var area = Fields.Get<UnityEngine.Object>(comp, "exitAreaData");
+            var spawn = Fields.Get<string>(comp, "targetSpawnPointID");
             if (area == null) return;
             world.Entrances.Add(new Slot
             {
@@ -515,7 +515,7 @@ namespace RandomHowl
             var type = AccessTools.TypeByName("RegionDataManager");
             var instance = type == null ? null : AccessTools.Property(type, "Instance");
             var manager = instance == null ? null : instance.GetValue(null, null);
-            var regions = manager == null ? null : Fields.Get(manager, "regions") as IList;
+            var regions = manager == null ? null : Fields.Get<IList>(manager, "regions");
             if (regions == null)
             {
                 log.LogWarning("no RegionDataManager.regions — caves can't be paired, "
@@ -527,17 +527,17 @@ namespace RandomHowl
                 if (region == null) continue;
                 foreach (var list in new[] { "waypoints", "caves" })
                 {
-                    var entries = Fields.Get(region, list) as IList;
+                    var entries = Fields.Get<IList>(region, list);
                     if (entries == null) continue;
                     foreach (var entry in entries)
                     {
-                        var id = entry == null ? null : Fields.Get(entry, "ID") as string;
+                        var id = entry == null ? null : Fields.Get<string>(entry, "ID");
                         if (string.IsNullOrEmpty(id) || world.Spawns.ContainsKey(id)) continue;
                         var position = Fields.Get(entry, "position");
                         var at = position is Vector2 ? (Vector2)position : Vector2.zero;
                         world.Spawns[id] = new Place
                         {
-                            Scene = Fields.Get(entry, "scene") as string,
+                            Scene = Fields.Get<string>(entry, "scene"),
                             X = at.x,
                             Y = at.y,
                         };
@@ -551,7 +551,7 @@ namespace RandomHowl
         {
             var uuid = Registry.Uuid(comp.gameObject);
             if (uuid == null) return;
-            var prefabs = Fields.Get(comp, "enemyPrefabs") as IList;
+            var prefabs = Fields.Get<IList>(comp, "enemyPrefabs");
             if (prefabs == null) return;
             var type = Number(Fields.Get(comp, "arenaType"));
             if (comp.gameObject.name == "StagArena")
@@ -561,7 +561,7 @@ namespace RandomHowl
             // The arena spawns one spirit per spawn point, up to its
             // difficulty, cycling through the prefab list. So a prefab can
             // spawn several times, or not at all.
-            var points = Fields.Get(comp, "spawnPoints") as IList;
+            var points = Fields.Get<IList>(comp, "spawnPoints");
             var spawns = Math.Min(Number(Fields.Get(comp, "baseDifficulty")),
                                   points == null ? 0 : points.Count);
             for (var i = 0; i < prefabs.Count; i++)
@@ -587,7 +587,7 @@ namespace RandomHowl
             if (world.Rarity.ContainsKey(prefab.name)) return;
             if (go == null) return;
             var spirit = Registry.EnemyType == null ? null : go.GetComponent(Registry.EnemyType);
-            var drops = spirit == null ? null : Fields.Get(spirit, "lootDrops") as IList;
+            var drops = spirit == null ? null : Fields.Get<IList>(spirit, "lootDrops");
             if (drops != null)
             {
                 var loot = new List<string>();

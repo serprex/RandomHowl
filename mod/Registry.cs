@@ -205,7 +205,7 @@ namespace RandomHowl
 
         public static string NodeKey(UnityEngine.Object node)
         {
-            var realm = Fields.Get(node, "cardType") as UnityEngine.Object;
+            var realm = Fields.Get<UnityEngine.Object>(node, "cardType");
             var reward = Fields.Get(node, "rewardType");
             return "node:" + (realm == null ? "-" : Registry.GuidOf(realm))
                    + ":" + (reward == null ? "-" : reward.ToString());
@@ -216,8 +216,7 @@ namespace RandomHowl
             return Plan.Key(NodeScene, NodeKey(node));
         }
 
-        /// A chest can hold several items, so its UUID plus the item's spot
-        /// in its list.
+        /// A nest can hold several items
         public static string TreasureKey(string uuid, int index)
         {
             return uuid + "#" + index;
@@ -256,13 +255,17 @@ namespace RandomHowl
             return field == null ? null : field.GetValue(instance);
         }
 
-        /// A read-only property, for the few values the game computes instead
-        /// of storing.
+        public static T Get<T>(object instance, string name) => As<T>(Get(instance, name));
+
         public static object Property(object instance, string name)
         {
             var getter = AccessTools.PropertyGetter(instance.GetType(), name);
             return getter == null ? null : getter.Invoke(instance, null);
         }
+
+        public static T Property<T>(object instance, string name) => As<T>(Property(instance, name));
+
+        public static T As<T>(object value) => value is T t ? t : default;
 
         public static bool Set(object instance, string name, object value)
         {

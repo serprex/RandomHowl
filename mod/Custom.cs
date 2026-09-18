@@ -151,7 +151,7 @@ namespace RandomHowl
         {
             if (asking) return true;
             var settings = Settings();
-            var index = settings == null ? null : Fields.Get(settings, "typeManaPenaltyIndex") as int?;
+            var index = settings == null ? null : Fields.Get<int?>(settings, "typeManaPenaltyIndex");
             if (index == null || (index.Value & Several) == 0) return true;
             var kinds = new List<int>();
             for (var kind = FirstKind; kind < KindLabels.Length; kind++)
@@ -165,7 +165,7 @@ namespace RandomHowl
         {
             if (asking) return true;
             var settings = Settings();
-            if (settings == null || Fields.Get(settings, "realmManaPenaltyIndex") as int? != AllRealms)
+            if (settings == null || Fields.Get<int?>(settings, "realmManaPenaltyIndex") != AllRealms)
                 return true;
             __result = AnyRule(__instance, settings, "realmManaPenaltyIndex", realmPenalty,
                                new[] { ForeignCards, InRealmCards });
@@ -202,7 +202,7 @@ namespace RandomHowl
         public static void Unlocking(object __instance)
         {
             var settings = Fields.Get(__instance, "customModeSettings");
-            var index = settings == null ? null : Fields.Get(settings, "typeManaPenaltyIndex") as int?;
+            var index = settings == null ? null : Fields.Get<int?>(settings, "typeManaPenaltyIndex");
             if (index == null || (index.Value & Several) == 0) return;
             if ((index.Value & 1 << RandomCards) == 0) return;
             lentSettings = settings;
@@ -236,11 +236,11 @@ namespace RandomHowl
 
         static void AddRows(Component menu, CustomRows rows)
         {
-            var template = Fields.Get(menu, "rebirthCardSet") as Component;
-            var health = Fields.Get(menu, "playerHealth") as Component;
-            var realm = Fields.Get(menu, "cardManaPenaltyByRealm") as Component;
-            var kind = Fields.Get(menu, "cardManaPenaltyByType") as Component;
-            var options = Fields.Get(menu, "allOptions") as IList;
+            var template = Fields.Get<Component>(menu, "rebirthCardSet");
+            var health = Fields.Get<Component>(menu, "playerHealth");
+            var realm = Fields.Get<Component>(menu, "cardManaPenaltyByRealm");
+            var kind = Fields.Get<Component>(menu, "cardManaPenaltyByType");
+            var options = Fields.Get<IList>(menu, "allOptions");
             if (template == null || health == null || realm == null || kind == null)
             {
                 log.LogWarning("the custom mode screen is not shaped the way we "
@@ -259,7 +259,7 @@ namespace RandomHowl
                 rows.Energy = energy.GetComponent(template.GetType());
             }
 
-            var choices = Fields.Get(realm, "valueTexts") as IList;
+            var choices = Fields.Get<IList>(realm, "valueTexts");
             var textType = AccessTools.TypeByName("TextData");
             if (choices != null && textType != null && choices.Count == AllRealms)
             {
@@ -308,7 +308,7 @@ namespace RandomHowl
             if (rows == null || setting == null) return;
             try
             {
-                var kinds = Kinds(Fields.Get(setting, "typeManaPenaltyIndex") as int? ?? 0);
+                var kinds = Kinds(Fields.Get<int?>(setting, "typeManaPenaltyIndex") ?? 0);
                 for (var i = 0; i < rows.Toggles.Count; i++)
                     Show(rows.Toggles[i], (kinds & 1 << rows.Kinds[i]) != 0);
                 if (rows.Energy != null)
@@ -341,7 +341,7 @@ namespace RandomHowl
             {
                 var kinds = 0;
                 for (var i = 0; i < rows.Toggles.Count; i++)
-                    if ((Fields.Get(rows.Toggles[i], "valueIndex") as int? ?? 0) != 0)
+                    if ((Fields.Get<int?>(rows.Toggles[i], "valueIndex") ?? 0) != 0)
                         kinds |= 1 << rows.Kinds[i];
                 Fields.Set(settings, "typeManaPenaltyIndex", Index(kinds));
             }

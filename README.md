@@ -86,13 +86,13 @@ uncollected spoiles count.
 
 Everything on the in-game screen is also stored in
 `BepInEx/config/randomhowl.cfg`. These are the settings new games get.
-`skip_logos`, `skip_intro` and `auto_text` are under **SETTINGS > GAMEPLAY**
+`skip_logos`, `skip_intro`, `auto_text`, `enable_cheats` and `faster_ro` are under **SETTINGS > GAMEPLAY**
 instead.
 
 When a new game starts, whether it is randomized is saved to
 `profile_<N>.randomhowl.cfg` in the game's `saves_v_1_0` folder, next to that
 save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
-`auto_text` and `spoiler_log` is copied there too.
+`auto_text`, `enable_cheats`, `faster_ro` and `spoiler_log` is copied there too.
 
 | Setting | Values | What it does |
 | --- | --- | --- |
@@ -112,9 +112,11 @@ save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
 | `all_cards_revealed` | true / false | All craftable cards are in the card book from the start |
 | `tear_health` | true / false | Enemies get 1% more health for each blood tear placed on the skill tree, up to 75% more |
 | `open_world` | true / false | Paths from forest are open from the start |
-| `skip_logos` | true / false | Skip the publisher logos |
-| `skip_intro` | true / false | Skip the opening cutscene, the tutorial scenes with Olvi and the stags, and the moose scenes at the waterfalls, each realm and the foot of the mountain. Walks in those scenes still happen, and blood tears still show their popup |
+| `skip_logos` | true / false | Skip publisher logos |
+| `skip_intro` | true / false | Skip intro and moose cutscenes. Walks in those scenes still happen, and blood tears still show their popup |
 | `auto_text` | true / false | Dialogue boxes click through on their own, skipping the letter-by-letter text. Choices still wait |
+| `enable_cheats` | true / false | Turn on the game's debug cheat keys, only in saves that aren't randomized |
+| `faster_ro` | true / false | Ro moves twice as fast |
 | `spoiler_log` | true / false | Write a spoiler log |
 
 The `[custom]` section holds the rest of the custom mode screen.
@@ -130,6 +132,31 @@ The `[custom]` section holds the rest of the custom mode screen.
 | `realm_cost` | `0` to `3` | Which realm cards cost 1 more: `0` foreign, `1` the realm you're in, `2` none, `3` all realms |
 | `kind_cost` | number | Which kinds of card cost 1 more. Easier to set on the screen |
 | `return_to_grove` | true / false | Go back to the grove when Ro dies |
+
+## Cheats
+
+With `enable_cheats` on, in a save that isn't randomized, hold Shift and press
+a key. Pressing both Shifts at once keeps cheats on without holding Shift.
+
+| Key | Does |
+| --- | --- |
+| `N` | Deal 100 damage to all enemies (in fight, on your turn) |
+| `X` | End fight |
+| `L` | Lightning at mouse cell (in fight) |
+| `C` | Draw a card in fight. In cards view, craft hovered card |
+| `H` | Full health |
+| `M` | Full energy (in fight) |
+| `R` | +1 energy. Outside fights, also respawn enemies and heal |
+| `E` | +10 progress toward new recipes |
+| `D` | +1 howl |
+| `F` | Toggle 5x game speed |
+| `I` | In cards view, add missing materials for hovered card |
+| `Y` | In cards view, unlock 4 random recipes of this realm |
+| `U` | In cards view, unlock all realms, press again for every card. In totems, get all totems. In skill tree, +10 blood tears |
+| `A` | In cards view, no minimum deck size |
+| `B` | In cards view, random 15 card deck of this realm |
+| `G` + `1`–`5` | Hide UI, hover stats, cursor, dialogue, Ro |
+| `K` + `1`–`3` | Input: keyboard & mouse, controller, both |
 
 ## Uninstall
 

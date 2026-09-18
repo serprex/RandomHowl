@@ -93,7 +93,7 @@ namespace RandomHowl
                 Plugin.Instance.OpenProfile();
                 return true;
             }
-            var blocker = Fields.Get(__instance, "blocker") as GameObject;
+            var blocker = Fields.Get<GameObject>(__instance, "blocker");
             if (blocker != null) blocker.SetActive(true);
             __result = WaitForWorld(__instance);
             return false;
@@ -116,7 +116,7 @@ namespace RandomHowl
 
         static void Build(Component title)
         {
-            var entry = Fields.Get(title, "settingsEntry") as GameObject;
+            var entry = Fields.Get<GameObject>(title, "settingsEntry");
             var custom = AccessTools.TypeByName("CustomModeSelectionMenu");
             var source = custom == null ? null : title.GetComponentInChildren(custom, true);
             if (entry == null || source == null)
@@ -142,8 +142,8 @@ namespace RandomHowl
         /// gets a RANDOMIZER row at the top.
         static void AddCustomRow(Component menu)
         {
-            var panel = Fields.Get(menu, "optionaPanel") as CanvasGroup;
-            var template = Fields.Get(menu, "rebirthCardSet") as Component;
+            var panel = Fields.Get<CanvasGroup>(menu, "optionaPanel");
+            var template = Fields.Get<Component>(menu, "rebirthCardSet");
             if (panel == null || template == null)
             {
                 log.LogWarning("the custom mode screen is not shaped the way we "
@@ -155,7 +155,7 @@ namespace RandomHowl
             var row = AddToggle(panel.transform, template, "RANDOMIZER", Plugin.Instance.Enabled);
             row.transform.SetAsFirstSibling();
             // Controller navigation goes down this list.
-            var options = Fields.Get(menu, "allOptions") as IList;
+            var options = Fields.Get<IList>(menu, "allOptions");
             if (options != null) options.Insert(0, row);
             // Ten rows don't fit in the game's one column.
             TwoColumns(panel.transform, rowSize);
@@ -215,10 +215,10 @@ namespace RandomHowl
             clone.SetActive(false);
 
             var menu = clone.GetComponent(source.GetType());
-            var panel = Fields.Get(menu, "optionaPanel") as CanvasGroup;
-            var heading = Fields.Get(menu, "title") as Text;
-            var done = Fields.Get(menu, "doneButton") as Component;
-            var template = Fields.Get(menu, "rebirthCardSet") as Component;
+            var panel = Fields.Get<CanvasGroup>(menu, "optionaPanel");
+            var heading = Fields.Get<Text>(menu, "title");
+            var done = Fields.Get<Component>(menu, "doneButton");
+            var template = Fields.Get<Component>(menu, "rebirthCardSet");
             // Right away, not at end of frame, or its Start takes the done
             // button back.
             UnityEngine.Object.DestroyImmediate(menu);
@@ -416,7 +416,7 @@ namespace RandomHowl
             var go = row.gameObject;
             go.name = "Seed";
             Describe(row, "SEED");
-            var display = Fields.Get(row, "valueTextDisplay") as Text;
+            var display = Fields.Get<Text>(row, "valueTextDisplay");
             var background = go.GetComponent<Image>();
             UnityEngine.Object.DestroyImmediate(row);
             foreach (var trigger in go.GetComponents<EventTrigger>())
@@ -447,9 +447,10 @@ namespace RandomHowl
 
         // --- settings > gameplay --------------------------------------------
 
-        /// Skip logos, skip intro and auto text aren't about the shuffle, so
-        /// they sit with the game's own options. The tab turns on each time it
-        /// opens: add the rows the first time, then show the current values.
+        /// Skip logos, skip intro, auto text, cheats and faster ro aren't about
+        /// the shuffle, so they sit with the game's own options. The tab turns
+        /// on each time it opens: add the rows the first time, then show the
+        /// current values.
         public static void GameplayShown(Component __instance)
         {
             try
@@ -472,21 +473,47 @@ namespace RandomHowl
             // This list is what a controller moves down.
             var handlerType = AccessTools.TypeByName("AudioSettingsMenuControlsHandler");
             var handler = handlerType == null ? null : menu.GetComponent(handlerType);
-            var items = handler == null ? null : Fields.Get(handler, "items") as List<GameObject>;
+            var items = handler == null ? null : Fields.Get<List<GameObject>>(handler, "items");
             if (items == null || items.Count < 2)
             {
                 log.LogWarning("the gameplay tab is not shaped the way we expect — "
-                               + "skip logos, skip intro and auto text are only in "
+                               + "skip logos, skip intro, auto text, cheats and faster ro are only in "
                                + "the config file");
                 return;
             }
             // Each new row goes as far below the last as the last is below the
             // one before it.
             var step = Position(items[items.Count - 1]) - Position(items[items.Count - 2]);
+            // Copy the game's own row each time. A copy of one of ours would
+            // bring along its SettingRow, which has no config and breaks Show.
+            var template = items[items.Count - 1];
             var plugin = Plugin.Instance;
-            AddSettingRow(items, step, "SKIP LOGOS", plugin.SkipLogos);
-            AddSettingRow(items, step, "SKIP INTRO", plugin.SkipIntro);
-            AddSettingRow(items, step, "AUTO TEXT", plugin.AutoText);
+            AddSettingRow(items, template, step, "SKIP LOGOS", plugin.SkipLogos);
+            AddSettingRow(items, template, step, "SKIP INTRO", plugin.SkipIntro);
+            AddSettingRow(items, template, step, "AUTO TEXT", plugin.AutoText);
+            AddSettingRow(items, template, step, "CHEATS", plugin.Cheats);
+            AddSettingRow(items, template, step, "FASTER RO", plugin.FasterRo);
+            Columns(items, step);
+        }
+
+        /// Too many rows for one column, so split them in two, side by side.
+        /// The list order stays the same, so a controller goes down the left
+        /// column and then on down the right one.
+        static void Columns(List<GameObject> items, Vector2 step)
+        {
+            var first = items[0].transform as RectTransform;
+            if (first == null) return;
+            var top = first.anchoredPosition;
+            var width = first.rect.width;
+            var half = (items.Count + 1) / 2;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var rect = items[i].transform as RectTransform;
+                if (rect == null) continue;
+                var right = i >= half;
+                var x = top.x + (right ? width / 2 : -width / 2);
+                rect.anchoredPosition = new Vector2(x, top.y) + step * (right ? i - half : i);
+            }
         }
 
         static Vector2 Position(GameObject go)
@@ -495,12 +522,13 @@ namespace RandomHowl
             return rect == null ? Vector2.zero : rect.anchoredPosition;
         }
 
-        /// Copy the last row: a toggle with its name and an ON/OFF text.
-        static void AddSettingRow(List<GameObject> items, Vector2 step, string label,
-                                  ConfigEntry<bool> config)
+        /// Copy a game row, a toggle with its name and an ON/OFF text, and
+        /// put it below the last row.
+        static void AddSettingRow(List<GameObject> items, GameObject template, Vector2 step,
+                                  string label, ConfigEntry<bool> config)
         {
             var last = items[items.Count - 1];
-            var go = UnityEngine.Object.Instantiate(last, last.transform.parent);
+            var go = UnityEngine.Object.Instantiate(template, last.transform.parent);
             go.name = label;
             go.transform.SetSiblingIndex(last.transform.GetSiblingIndex() + 1);
             var rect = go.transform as RectTransform;
@@ -552,7 +580,7 @@ namespace RandomHowl
         /// through.
         static void KeepSelection(Component title)
         {
-            var screens = Fields.Get(title, "allScreensThatCanBlock") as IList;
+            var screens = Fields.Get<IList>(title, "allScreensThatCanBlock");
             if (screens == null)
             {
                 log.LogWarning("no TitleMenu.allScreensThatCanBlock — the seed "
@@ -575,7 +603,7 @@ namespace RandomHowl
 
         internal static void Describe(Component row, string text)
         {
-            var label = Fields.Get(row, "descriptionDisplay") as Text;
+            var label = Fields.Get<Text>(row, "descriptionDisplay");
             if (label == null) return;
             Unlocalize(label.gameObject);
             label.text = text;

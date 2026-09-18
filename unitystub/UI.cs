@@ -49,6 +49,15 @@ namespace UnityEngine.UI
         public ButtonClickedEvent onClick { get => throw null; set => throw null; }
     }
 
+    public class Toggle : Selectable
+    {
+        public class ToggleEvent : UnityEvent<bool> { }
+
+        // A field in the real thing, not a property.
+        public ToggleEvent onValueChanged;
+        public bool isOn { get => throw null; set => throw null; }
+    }
+
     public class InputField : Selectable
     {
         public class EndEditEvent : UnityEvent<string> { }
