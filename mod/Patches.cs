@@ -131,6 +131,7 @@ namespace RandomHowl
         {
             plan = shuffled;
             log = logger;
+            Chimeras.Reset(plan, log);
 
             Hook(harmony, "WorldItem", "OnEnable", nameof(ItemAppeared));
             Hook(harmony, "EventArea", "Start", nameof(StagRemoved));
@@ -216,14 +217,20 @@ namespace RandomHowl
             {
                 var arena = (Component)__instance;
                 string[] wanted;
-                if (!plan.Spirits.TryGetValue(Keys.Uuid(arena), out wanted)) return;
+                plan.Spirits.TryGetValue(Keys.Uuid(arena), out wanted);
+                if (wanted == null && plan.Chimeras.Count == 0) return;
                 var prefabs = Fields.Get<IList>(__instance, "enemyPrefabs");
                 if (prefabs == null) return;
-                for (var i = 0; i < wanted.Length && i < prefabs.Count; i++)
+                for (var i = 0; i < prefabs.Count; i++)
                 {
-                    if (wanted[i] == null) continue;
-                    var prefab = Registry.Spirit(wanted[i]);
-                    if (prefab == null) Missing("spirit", wanted[i]);
+                    // Spirits the shuffle left alone can still be chimeras.
+                    var name = wanted != null && i < wanted.Length ? wanted[i] : null;
+                    var current = prefabs[i] as UnityEngine.Object;
+                    if (name == null && current != null && plan.Chimeras.ContainsKey(current.name))
+                        name = current.name;
+                    if (name == null) continue;
+                    var prefab = Chimeras.Prefab(name);
+                    if (prefab == null) Missing("spirit", name);
                     else prefabs[i] = prefab;
                 }
             });

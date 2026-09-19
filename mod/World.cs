@@ -93,6 +93,11 @@ namespace RandomHowl
         /// these at random.
         public readonly Dictionary<string, string[]> Loot = new Dictionary<string, string[]>();
 
+        /// Spirit prefabs whose stats, attacks and AI can be mixed by the
+        /// chimeras option: plain spirits that walk and attack, with no
+        /// special code of their own.
+        public readonly HashSet<string> Chimeric = new HashSet<string>();
+
         /// Card to how many copies the game allows by default: 2 for common, 1
         /// for rare. Reward cards get a number too, in case one becomes
         /// craftable.

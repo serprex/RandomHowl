@@ -99,6 +99,7 @@ save. For a randomized game, every setting except `skip_logos`, `skip_intro`,
 | `enabled` | true / false | Whether a new custom mode game is randomized. Same as the RANDOMIZER row on the custom mode screen |
 | `seed` | text | Same seed, same shuffle. Empty picks a random one |
 | `spirits` | `Off` / `On` / `Restricted` | Shuffle spirits between fights. Environmental objects shuffle with each other. `Restricted` swaps elder spirits only with elder spirits, and plain spirits only with plain ones. With `elder_percent` set, it keeps elder spirits in elder spirit fights instead |
+| `chimeras` | true / false | Spirits takes traits from other spirits |
 | `card_gifts` | `Off` / `On` / `Everything` | Shuffle which card each reward gives. `Everything` adds elder spirit gifts and Fylge cards. A reward card that nothing gives any more can be crafted instead, using the recipe of a card that took its place |
 | `elder_percent` | `-1` to `100` | Share of spirits that appear as elder spirits. With `spirits` set to `Restricted`, it only counts spirits in elder spirit fights. `-1` keeps the vanilla amount (about 23%) |
 | `totems` | true / false | Shuffle totems |

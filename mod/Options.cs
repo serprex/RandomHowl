@@ -266,6 +266,7 @@ namespace RandomHowl
             AddChoice(list, template, "SPIRITS", SpiritLabels, SpiritValues, false,
                       (int)plugin.SpiritMode.Value,
                       value => plugin.SpiritMode.Value = (SpiritShuffle)value);
+            AddToggle(list, template, "CHIMERAS", plugin.Shuffles["chimeras"]);
             AddChoice(list, template, "ELDER%", ElderPercentLabels,
                       ElderPercentValues, true, plugin.ElderPercent.Value,
                       value => plugin.ElderPercent.Value = value);

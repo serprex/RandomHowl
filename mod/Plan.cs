@@ -42,6 +42,15 @@ namespace RandomHowl
         Restricted,
     }
 
+    /// Where a chimera takes its parts from: a spirit prefab name for each.
+    public struct Chimera
+    {
+        public string Stats;
+        public string Attacks;
+        public string Ai;
+        public string Traits;
+    }
+
     public class Rng
     {
         const ulong Mult = 6364136223846793005UL;
@@ -104,6 +113,8 @@ namespace RandomHowl
         /// Scarce howls only: what each fight drops on its first win, one entry
         /// per spirit it spawns.
         public readonly Dictionary<string, List<Drop>> Drops = new Dictionary<string, List<Drop>>();
+        /// Chimeras only: spirit prefab name to where its parts come from.
+        public readonly Dictionary<string, Chimera> Chimeras = new Dictionary<string, Chimera>();
         public readonly List<string> Spoiler = new List<string>();
 
         public static string Key(string scene, string key)
@@ -172,6 +183,7 @@ namespace RandomHowl
             // Spirits come after the recipes: under scarce howls, how many of
             // each spirit there are depends on what the cards are made of.
             plan.BuildSpirits(world, seed, spirits, elderPercent, scarce);
+            if (enabled("chimeras")) plan.BuildChimeras(world, seed);
 
             return plan;
         }
@@ -664,6 +676,56 @@ namespace RandomHowl
                     if (Key(slot.Scene, slot.Key) == tutorial && slot.Index < later.Length)
                         Note("spirit", world, "prefab", slot, later[slot.Index]);
             }
+        }
+
+        /// Each spirit keeps its body: sprites, sounds, effects and drops. It
+        /// takes its stats, its attacks, its AI and its traits (retaliate,
+        /// deathtouch and the like) from other spirits, each part picked on
+        /// its own. Plain spirits only take parts from plain spirits, and
+        /// elder spirits from elder spirits.
+        void BuildChimeras(World world, string seed)
+        {
+            var elder = new Dictionary<string, string>();
+            var plain = new Dictionary<string, string>();
+            Pairs(world.Rarity, elder, plain);
+            var tiers = new[] { new List<string>(), new List<string>() };
+            foreach (var name in world.Chimeric)
+            {
+                if (!world.Rarity.ContainsKey(name) || Environmental.Contains(name)
+                    || IsBossTier(name, world.Rarity, plain)) continue;
+                tiers[plain.ContainsKey(name) ? 1 : 0].Add(name);
+            }
+            for (var t = 0; t < tiers.Length; t++)
+            {
+                var tier = tiers[t];
+                // Sorted, since the set's order isn't the seed's to decide.
+                tier.Sort(StringComparer.Ordinal);
+                var stats = Donors(tier, seed + ":chimera stats:" + t);
+                var attacks = Donors(tier, seed + ":chimera attacks:" + t);
+                var ai = Donors(tier, seed + ":chimera ai:" + t);
+                var traits = Donors(tier, seed + ":chimera traits:" + t);
+                for (var i = 0; i < tier.Count; i++)
+                {
+                    Chimeras[tier[i]] = new Chimera
+                    {
+                        Stats = stats[i], Attacks = attacks[i], Ai = ai[i], Traits = traits[i],
+                    };
+                    Note("chimera stats", tier[i], world, "prefab", tier[i], stats[i]);
+                    Note("chimera attacks", tier[i], world, "prefab", tier[i], attacks[i]);
+                    Note("chimera ai", tier[i], world, "prefab", tier[i], ai[i]);
+                    Note("chimera traits", tier[i], world, "prefab", tier[i], traits[i]);
+                }
+            }
+        }
+
+        static string[] Donors(List<string> names, string seed)
+        {
+            var order = new int[names.Count];
+            for (var i = 0; i < order.Length; i++) order[i] = i;
+            Shuffle(order, null, new Rng(seed));
+            var donors = new string[names.Count];
+            for (var i = 0; i < donors.Length; i++) donors[i] = names[order[i]];
+            return donors;
         }
 
         /// The first fight, one boar, is played twice: in the tutorial, then

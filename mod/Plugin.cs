@@ -85,6 +85,8 @@ namespace RandomHowl
                     "which realm each card belongs to") },
                 { "recipes", Config.Bind("shuffle", "recipes", true,
                     "which ingredients each card is crafted from") },
+                { "chimeras", Config.Bind("shuffle", "chimeras", false,
+                    "spirits takes traits from other spirits") },
             };
 
             EntranceMode = Config.Bind("shuffle", "entrances", EntranceShuffle.On,

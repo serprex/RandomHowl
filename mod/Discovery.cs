@@ -599,10 +599,40 @@ namespace RandomHowl
                 }
                 world.Loot[prefab.name] = loot.ToArray();
             }
+            if (spirit != null && Chimeric(spirit)) world.Chimeric.Add(prefab.name);
             var character = Registry.CharacterType == null ? null
                 : go.GetComponent(Registry.CharacterType);
             if (character == null) return;
             world.Rarity[prefab.name] = Number(Fields.Get(character, "rarityType"));
+        }
+
+        /// Flags that make a spirit more than a spirit: tiles, eggs, crystals,
+        /// frozen spirits, Imitators and Fylges.
+        static readonly string[] SpecialFlags =
+        {
+            "unmovable", "skipTurn", "endCombatEvenThoughAlive", "destroyWhenPushedInto",
+            "isFrozenEnemy", "isImitator", "isImitatorElite", "isFylge",
+        };
+
+        /// Whether a spirit can take part in chimeras. It must be a plain Enemy,
+        /// not a subclass like Beetle or Oyster whose code expects its own
+        /// attacks. Every attack must be a simple one, so a card can be swapped
+        /// in, and it must have at least one. It must be able to move, which
+        /// leaves out eggs like the dragonfly egg.
+        static bool Chimeric(Component spirit)
+        {
+            if (spirit.GetType() != Registry.EnemyType) return false;
+            var stats = Fields.Get(spirit, "stats");
+            if (stats == null || Fields.Get<int>(stats, "maxMana") <= 0) return false;
+            var abilities = Fields.Get<IList>(spirit, "abilities");
+            if (abilities == null || abilities.Count == 0) return false;
+            foreach (var ability in abilities)
+                if (ability == null || ability.GetType().Name != "BasicAnimatedCardAttack") return false;
+            var modifiers = Fields.Get(spirit, "startingModifiers");
+            if (modifiers == null) return false;
+            foreach (var flag in SpecialFlags)
+                if (Fields.Get<bool>(modifiers, flag)) return false;
+            return true;
         }
 
         /// An enum field, as the int the game stores it as.
