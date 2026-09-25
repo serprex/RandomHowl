@@ -30,11 +30,12 @@ namespace RandomHowl
         public int Amount;
     }
 
-    /// A nest: its blood tears, and the items it holds in order.
-    public class Nest
+    /// A nest or plain chest: its blood tears, and the items it holds in order.
+    public class Chest
     {
         public string Scene;
         public string Key;          // the nest's UUID
+        public bool Nest;           // a red nest; plain chests stay put
         public int Tears;
         public string[] Items;      // item ids; null where an item has no id
     }
@@ -81,9 +82,9 @@ namespace RandomHowl
         ///Surprise fights named StagArena. Scene plus arena UUID, as Plan.Key
         public readonly HashSet<string> StagArenas = new HashSet<string>();
 
-        /// Every nest that holds something. Its items are also in Ingredients
-        /// or Totems, keyed by Keys.TreasureKey.
-        public readonly List<Nest> Nests = new List<Nest>();
+        /// Every nest and chest that holds something. Its items are also in
+        /// Ingredients or Totems, keyed by Keys.TreasureKey.
+        public readonly List<Chest> Chests = new List<Chest>();
 
         /// Spirit prefab name to how the game ranks it: 0 common, 1 elder
         /// spirit, 2 boss. Filled in as the arenas are scanned.

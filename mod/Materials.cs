@@ -22,9 +22,9 @@ namespace RandomHowl
         // Ingredients found in current region, worked out when the screen opens.
         static readonly HashSet<string> here = new HashSet<string>();
 
-        // Every ingredient id, and the ingredient slots that sit in nests.
+        // Every ingredient id, and the ingredient slots that sit in nests and chests.
         static readonly HashSet<string> ingredients = new HashSet<string>();
-        static readonly HashSet<string> nestItems = new HashSet<string>();
+        static readonly HashSet<string> chestItems = new HashSet<string>();
 
         // Scene to the zone it belongs to, from the game's region list.
         static Dictionary<string, UnityEngine.Object> zones;
@@ -36,11 +36,11 @@ namespace RandomHowl
             world = scanned;
             plan = shuffled;
             ingredients.Clear();
-            nestItems.Clear();
+            chestItems.Clear();
             foreach (var slot in world.Ingredients) ingredients.Add(slot.Value);
-            foreach (var nest in world.Nests)
-                for (var i = 0; i < nest.Items.Length; i++)
-                    nestItems.Add(Plan.Key(nest.Scene, Keys.TreasureKey(nest.Key, i)));
+            foreach (var chest in world.Chests)
+                for (var i = 0; i < chest.Items.Length; i++)
+                    chestItems.Add(Plan.Key(chest.Scene, Keys.TreasureKey(chest.Key, i)));
             Patch(harmony, "IngredientsManager", "OnEnable", nameof(ScreenOpening), false);
             Patch(harmony, "IngredientSlot", "SetRim", nameof(RimSet), true);
             Patch(harmony, "IngredientsManager", "OnEndHoverOverSlot", nameof(HoverEnded), true);
@@ -127,7 +127,7 @@ namespace RandomHowl
 
             foreach (var slot in world.Ingredients)
             {
-                if (!scenes.Contains(slot.Scene) || nestItems.Contains(Plan.Key(slot.Scene, slot.Key))) continue;
+                if (!scenes.Contains(slot.Scene) || chestItems.Contains(Plan.Key(slot.Scene, slot.Key))) continue;
                 if (taken != null && taken.Contains(slot.Key)) continue;
                 string item;
                 if (!plan.Ingredients.TryGetValue(Plan.Key(slot.Scene, slot.Key), out item))
@@ -135,8 +135,8 @@ namespace RandomHowl
                 here.Add(item);
             }
 
-            // Nests can move, so go by what each nest holds now.
-            foreach (var entry in plan.Nests)
+            // Nests can move, so go by what each nest and chest holds now.
+            foreach (var entry in plan.Chests)
             {
                 var parts = entry.Key.Split('\u0001');
                 if (parts.Length != 2 || !scenes.Contains(parts[0])) continue;

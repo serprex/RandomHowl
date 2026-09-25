@@ -68,7 +68,7 @@ namespace RandomHowl
 
             // Base game bug: auto end turn can fire while a spirit is still
             // dying, before its card or mana arrives.
-            Hook(harmony, "Character", "Die", nameof(DeathStarted), true);
+            Hook(harmony, "Enemy", "DoDie", nameof(DeathStarted), true);
             Hook(harmony, "CombatArena", "OnCombatStarted", nameof(DeathsCleared));
             Hook(harmony, "PlayerCombatController", "AnyLeagalPlayerActions",
                  nameof(WaitForDeaths));
@@ -348,9 +348,9 @@ namespace RandomHowl
                 var nest = (Component)__instance;
                 var uuid = Registry.Uuid(nest.gameObject);
                 var items = Fields.Get<IList>(__instance, "treasures");
-                Nest wanted;
+                Chest wanted;
                 if (uuid == null || items == null
-                    || !plan.Nests.TryGetValue(Plan.Key(nest.gameObject.scene.name, uuid), out wanted))
+                    || !plan.Chests.TryGetValue(Plan.Key(nest.gameObject.scene.name, uuid), out wanted))
                     return;
                 items.Clear();
                 foreach (var guid in wanted.Items)
@@ -695,16 +695,19 @@ namespace RandomHowl
         /// Die runs the death on its own coroutine, so the card that killed
         /// the spirit can finish first. The spirit card and drained mana come
         /// at the end of that coroutine. Count deaths until they finish.
-        public static void DeathStarted(Coroutine __result)
+        /// Wraps the death steps rather than waiting on Die's coroutine, since
+        /// Unity lets only one coroutine wait on another, and the game's own
+        /// damage code already waits on it.
+        public static void DeathStarted(ref IEnumerator __result)
         {
             if (__result == null) return;
             dying++;
-            Plugin.Instance.StartCoroutine(DeathDone(__result, deathRound));
+            __result = DeathDone(__result, deathRound);
         }
 
-        static IEnumerator DeathDone(Coroutine death, int round)
+        static IEnumerator DeathDone(IEnumerator death, int round)
         {
-            yield return death;
+            while (death.MoveNext()) yield return death.Current;
             if (round == deathRound && dying > 0) dying--;
         }
 

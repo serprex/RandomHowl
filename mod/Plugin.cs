@@ -77,10 +77,11 @@ namespace RandomHowl
                 { "totems", Config.Bind("shuffle", "totems", true,
                     "which totem each totem reward gives, nests included") },
                 { "ingredients", Config.Bind("shuffle", "ingredients", true,
-                    "which ingredient each world pickup and nest gives") },
+                    "which ingredient each world pickup, nest and chest gives") },
                 { "nests", Config.Bind("shuffle", "nests", true,
-                    "which nest gets each nest's blood tears and items. Totems and "
-                    + "ingredients in nests still shuffle with the rest of the world") },
+                    "which red nest gets each red nest's blood tears and items. Plain "
+                    + "chests stay put. Totems and ingredients in both still shuffle "
+                    + "with the rest of the world") },
                 { "card_realms", Config.Bind("shuffle", "card_realms", true,
                     "which realm each card belongs to") },
                 { "recipes", Config.Bind("shuffle", "recipes", true,

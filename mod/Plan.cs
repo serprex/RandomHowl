@@ -104,8 +104,8 @@ namespace RandomHowl
         public readonly Dictionary<string, Entrance> Entrances = new Dictionary<string, Entrance>();
         public readonly Dictionary<string, string[]> Spirits = new Dictionary<string, string[]>();
         public readonly Dictionary<string, string> Cards = new Dictionary<string, string>();
-        /// What each nest holds now, keyed by scene plus nest UUID.
-        public readonly Dictionary<string, Nest> Nests = new Dictionary<string, Nest>();
+        /// What each nest and chest holds now, keyed by scene plus its UUID.
+        public readonly Dictionary<string, Chest> Chests = new Dictionary<string, Chest>();
         public readonly Dictionary<string, Ingredient[]> Recipes = new Dictionary<string, Ingredient[]>();
         public readonly Dictionary<string, string> Grants = new Dictionary<string, string>();
         /// Reward cards no reward hands over any more, which can be crafted now.
@@ -326,21 +326,24 @@ namespace RandomHowl
             return Ordered(slots);
         }
 
-        /// What each nest holds. With nests on, a nest gets another nest's
-        /// blood tears and items. The items were already shuffled as ingredients
-        /// and totems in the nest they came from. With nests off, each nest
-        /// keeps its own.
+        /// What each nest holds. With nests on, a red nest gets another red
+        /// nest's blood tears and items. The items were already shuffled as
+        /// ingredients and totems in the nest they came from. Plain chests, and
+        /// every nest with nests off, keep their own.
         void BuildNests(World world, string seed, bool shuffle)
         {
-            var byKey = new Dictionary<string, Nest>();
-            var slots = new List<Slot>();
-            foreach (var nest in world.Nests)
+            var byKey = new Dictionary<string, Chest>();
+            var nests = new List<Slot>();
+            var chests = new List<Slot>();
+            foreach (var chest in world.Chests)
             {
-                var key = Key(nest.Scene, nest.Key);
-                byKey[key] = nest;
-                slots.Add(Slot.Of(nest.Scene, nest.Key, key));
+                var key = Key(chest.Scene, chest.Key);
+                byKey[key] = chest;
+                (chest.Nest ? nests : chests).Add(Slot.Of(chest.Scene, chest.Key, key));
             }
-            foreach (var moved in Permute(Ordered(slots), seed, "nests", shuffle))
+            var placed = Permute(Ordered(nests), seed, "nests", shuffle);
+            placed.AddRange(Permute(Ordered(chests), seed, "chests", false));
+            foreach (var moved in placed)
             {
                 var from = byKey[moved.Value];
                 var items = new string[from.Items.Length];
@@ -351,8 +354,11 @@ namespace RandomHowl
                         && !Totems.TryGetValue(spot, out items[i]))
                         items[i] = from.Items[i];
                 }
-                Nests[moved.Slot.Value] = new Nest
-                    { Scene = from.Scene, Key = from.Key, Tears = from.Tears, Items = items };
+                Chests[moved.Slot.Value] = new Chest
+                {
+                    Scene = from.Scene, Key = from.Key, Nest = from.Nest, Tears = from.Tears,
+                    Items = items,
+                };
                 Note("nest", moved.Slot.Scene + " " + moved.Slot.Key, world, "nest",
                      moved.Slot.Scene + " " + moved.Slot.Key, from.Scene + " " + from.Key);
             }
@@ -769,12 +775,12 @@ namespace RandomHowl
             }
         }
 
-        /// Bosses, and elder spirits with no common form, like the Great
-        /// Spirits' arms, which only fit their own fight. Anything unranked
-        /// counts as boss tier and stays put.
+        /// Bosses, mini-bosses, and elder spirits with no common form, like
+        /// the Great Spirits' arms, which only fit their own fight.
         static bool IsBossTier(string value, Dictionary<string, int> rarity,
                                Dictionary<string, string> plain)
         {
+            if (value.EndsWith("FylgeEnemy", StringComparison.Ordinal)) return true;
             int rank;
             if (!rarity.TryGetValue(value, out rank)) return true;
             return rank == Boss || (rank == Elder && !plain.ContainsKey(value));

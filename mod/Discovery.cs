@@ -428,24 +428,25 @@ namespace RandomHowl
             world.Totems.Add(Slot.Of(scene, uuid, guid));
         }
 
-        /// Nests. Each item joins the ingredient or totem shuffle by its spot
-        /// in the nest, and the nest with its blood tears joins the nest
-        /// shuffle.
+        /// Nests and chests. Each item joins the ingredient or totem shuffle by
+        /// its spot in the nest. Red nests, with their blood tears, also join
+        /// the nest shuffle. Plain chests have no crystal hover animation.
         static void ScanTreasure(Component comp, string scene, World world)
         {
             var uuid = Registry.Uuid(comp.gameObject);
             if (uuid == null) return;
             var items = Fields.Get<IList>(comp, "treasures");
-            var nest = new Nest
+            var chest = new Chest
             {
                 Scene = scene, Key = uuid, Tears = Number(Fields.Get(comp, "skillPoints")),
+                Nest = Fields.Get<UnityEngine.Object>(comp, "hoverAnimator") != null,
                 Items = new string[items == null ? 0 : items.Count],
             };
-            for (var i = 0; i < nest.Items.Length; i++)
+            for (var i = 0; i < chest.Items.Length; i++)
             {
                 var data = items[i] as UnityEngine.Object;
                 var guid = data == null ? null : Registry.GuidOf(data);
-                nest.Items[i] = guid;
+                chest.Items[i] = guid;
                 if (guid == null) continue;
                 var slot = Slot.Of(scene, Keys.TreasureKey(uuid, i), guid);
                 if (TotemType != null && TotemType.IsInstanceOfType(data)) world.Totems.Add(slot);
@@ -454,7 +455,7 @@ namespace RandomHowl
             }
             // Leave out empty nests, like the unused one in MarshesCaveB, so
             // nothing gets shuffled into them.
-            if (nest.Tears > 0 || nest.Items.Length > 0) world.Nests.Add(nest);
+            if (chest.Tears > 0 || chest.Items.Length > 0) world.Chests.Add(chest);
         }
 
         static readonly Type TotemType = AccessTools.TypeByName("TotemData");
